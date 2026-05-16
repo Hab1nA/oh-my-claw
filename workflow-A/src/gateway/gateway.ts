@@ -1,19 +1,20 @@
-import { createHash } from 'node:crypto';
-import type { Duplex } from 'node:stream';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { URL } from 'node:url';
+import { WebSocketServer, type WebSocket } from 'ws';
 import { AgentRuntimeImpl } from '../agent/runtime.js';
 import { OpenAICompatibleModelCaller } from '../agent/model/caller.js';
 import { SessionManager } from '../agent/session/manager.js';
 import { ToolRegistry } from '../tools/registry.js';
 import { registerBuiltInTools } from '../tools/builtins/index.js';
 import type { Message } from '../shared/types.js';
+import { randomId } from '../shared/utils.js';
 import type { GatewayConfig } from './config/types.js';
 import { Logger } from './utils/logger.js';
 
 export class Gateway {
   private readonly logger = Logger.getInstance();
   private readonly server: Server;
+  private readonly wss: WebSocketServer;
   private readonly runtime: AgentRuntimeImpl;
 
   constructor(private readonly config: GatewayConfig) {
@@ -32,7 +33,8 @@ export class Gateway {
       config
     });
     this.server = createServer((req, res) => void this.handleHttp(req, res));
-    this.server.on('upgrade', (req, socket) => this.handleWebSocket(req, socket));
+    this.wss = new WebSocketServer({ server: this.server });
+    this.wss.on('connection', (ws) => this.handleWebSocketConnection(ws));
   }
 
   start(): Promise<void> {
@@ -46,6 +48,7 @@ export class Gateway {
   }
 
   stop(): Promise<void> {
+    this.wss.close();
     return new Promise((resolve, reject) => {
       this.server.close((error) => {
         if (error) reject(error);
@@ -73,7 +76,7 @@ export class Gateway {
         const sessionId = String(body.sessionId ?? 'default');
         const content = String(body.message ?? body.content ?? '');
         const message: Message = {
-          id: String(body.messageId ?? cryptoRandomId()),
+          id: String(body.messageId ?? randomId()),
           role: 'user',
           content,
           timestamp: new Date(),
@@ -91,48 +94,28 @@ export class Gateway {
     }
   }
 
-  private handleWebSocket(req: IncomingMessage, socket: Duplex): void {
-    const key = req.headers['sec-websocket-key'];
-    if (typeof key !== 'string') {
-      socket.destroy();
-      return;
-    }
-
-    const accept = createHash('sha1')
-      .update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')
-      .digest('base64');
-    socket.write(
-      [
-        'HTTP/1.1 101 Switching Protocols',
-        'Upgrade: websocket',
-        'Connection: Upgrade',
-        `Sec-WebSocket-Accept: ${accept}`,
-        '',
-        ''
-      ].join('\r\n')
-    );
-
-    socket.on('data', (chunk) => {
-      void this.handleWebSocketFrame(socket, chunk);
+  private handleWebSocketConnection(ws: WebSocket): void {
+    ws.on('message', (raw) => {
+      void this.handleWebSocketMessage(ws, raw);
     });
   }
 
-  private async handleWebSocketFrame(socket: Duplex, chunk: Buffer): Promise<void> {
+  private async handleWebSocketMessage(ws: WebSocket, raw: unknown): Promise<void> {
     try {
-      const text = decodeWebSocketTextFrame(chunk);
+      const text = typeof raw === 'string' ? raw : String(raw);
       const body = JSON.parse(text) as Record<string, unknown>;
       const sessionId = String(body.sessionId ?? 'default');
       const message: Message = {
-        id: String(body.messageId ?? cryptoRandomId()),
+        id: String(body.messageId ?? randomId()),
         role: 'user',
         content: String(body.message ?? body.content ?? ''),
         timestamp: new Date(),
         metadata: asRecord(body.metadata)
       };
       const response = await this.runtime.processMessage(sessionId, message);
-      socket.write(encodeWebSocketTextFrame(JSON.stringify(response)));
+      ws.send(JSON.stringify(response));
     } catch (error) {
-      socket.write(encodeWebSocketTextFrame(JSON.stringify({ error: String(error) })));
+      ws.send(JSON.stringify({ error: String(error) }));
     }
   }
 
@@ -155,40 +138,4 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
-}
-
-function cryptoRandomId(): string {
-  return Math.random().toString(36).slice(2) + Date.now().toString(36);
-}
-
-function decodeWebSocketTextFrame(buffer: Buffer): string {
-  const secondByte = buffer[1];
-  const masked = (secondByte & 0x80) !== 0;
-  let length = secondByte & 0x7f;
-  let offset = 2;
-  if (length === 126) {
-    length = buffer.readUInt16BE(offset);
-    offset += 2;
-  }
-  const mask = masked ? buffer.subarray(offset, offset + 4) : undefined;
-  if (masked) offset += 4;
-  const payload = buffer.subarray(offset, offset + length);
-  if (!mask) return payload.toString('utf-8');
-  const unmasked = Buffer.alloc(payload.length);
-  for (let i = 0; i < payload.length; i++) {
-    unmasked[i] = payload[i] ^ mask[i % 4];
-  }
-  return unmasked.toString('utf-8');
-}
-
-function encodeWebSocketTextFrame(text: string): Buffer {
-  const payload = Buffer.from(text, 'utf-8');
-  if (payload.length < 126) {
-    return Buffer.concat([Buffer.from([0x81, payload.length]), payload]);
-  }
-  const header = Buffer.alloc(4);
-  header[0] = 0x81;
-  header[1] = 126;
-  header.writeUInt16BE(payload.length, 2);
-  return Buffer.concat([header, payload]);
 }

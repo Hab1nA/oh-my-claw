@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import YAML from 'yaml';
 import type { GatewayConfig } from './types.js';
 
 const DEFAULT_CONFIG: GatewayConfig = {
@@ -52,7 +53,7 @@ function readConfigFile(filePath: string): Partial<GatewayConfig> {
   if (filePath.endsWith('.json')) {
     return JSON.parse(expanded) as Partial<GatewayConfig>;
   }
-  return parseSimpleYaml(expanded) as Partial<GatewayConfig>;
+  return YAML.parse(expanded) as Partial<GatewayConfig>;
 }
 
 function expandEnv(input: string): string {
@@ -94,50 +95,3 @@ function validateConfig(config: GatewayConfig): void {
     throw new Error('tools.allowedPaths must contain at least one path');
   }
 }
-
-function parseSimpleYaml(raw: string): Record<string, unknown> {
-  const root: Record<string, unknown> = {};
-  const stack: Array<{ indent: number; value: Record<string, unknown> }> = [{ indent: -1, value: root }];
-  const lines = raw.split(/\r?\n/);
-
-  for (const line of lines) {
-    if (!line.trim() || line.trim().startsWith('#')) continue;
-    const indent = line.match(/^\s*/)?.[0].length ?? 0;
-    const trimmed = line.trim();
-    const match = trimmed.match(/^([^:]+):\s*(.*)$/);
-    if (!match) continue;
-
-    while (stack.length > 1 && indent <= stack[stack.length - 1].indent) {
-      stack.pop();
-    }
-
-    const key = match[1].trim();
-    const valueText = match[2].trim();
-    const parent = stack[stack.length - 1].value;
-
-    if (valueText === '') {
-      const child: Record<string, unknown> = {};
-      parent[key] = child;
-      stack.push({ indent, value: child });
-    } else {
-      parent[key] = parseYamlScalar(valueText);
-    }
-  }
-
-  return root;
-}
-
-function parseYamlScalar(value: string): unknown {
-  if (value === 'true') return true;
-  if (value === 'false') return false;
-  if (/^-?\d+(\.\d+)?$/.test(value)) return Number(value);
-  if (value.startsWith('[') && value.endsWith(']')) {
-    return value
-      .slice(1, -1)
-      .split(',')
-      .map((item) => item.trim().replace(/^['"]|['"]$/g, ''))
-      .filter(Boolean);
-  }
-  return value.replace(/^['"]|['"]$/g, '');
-}
-

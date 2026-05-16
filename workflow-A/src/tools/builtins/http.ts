@@ -1,4 +1,26 @@
-import type { ToolDefinition } from '../types.js';
+import type { ToolExecutionContext, ToolDefinition, ToolResult } from '../types.js';
+import { Logger } from '../../gateway/utils/logger.js';
+
+const logger = Logger.getInstance();
+
+const BLOCKED_HOSTS = [
+  'localhost',
+  '127.0.0.1',
+  '0.0.0.0',
+  '::1',
+  '169.254.169.254',
+  'metadata.google.internal'
+];
+
+function isUrlSafe(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase();
+    return !BLOCKED_HOSTS.some((blocked) => hostname === blocked || hostname.endsWith('.' + blocked));
+  } catch {
+    return false;
+  }
+}
 
 export const httpRequestTool: ToolDefinition = {
   name: 'http_request',
@@ -21,19 +43,42 @@ export const httpRequestTool: ToolDefinition = {
     },
     required: ['url']
   },
-  handler: async (params) => {
+  handler: async (params, context: Partial<ToolExecutionContext>): Promise<ToolResult> => {
+    const url = String(params.url);
+
+    if (!isUrlSafe(url)) {
+      logger.warn('HTTP request blocked: SSRF protection', {
+        url,
+        sessionId: context?.sessionId,
+        userId: context?.userId
+      });
+      return { success: false, error: `Request to this URL is blocked by SSRF protection: ${url}` };
+    }
+
+    logger.info('HTTP request initiated', {
+      url,
+      method: String(params.method ?? 'GET'),
+      sessionId: context?.sessionId,
+      userId: context?.userId
+    });
+
     const controller = new AbortController();
     const timeout = typeof params.timeout === 'number' ? params.timeout : 30000;
     const timer = setTimeout(() => controller.abort(), timeout);
 
     try {
-      const response = await fetch(String(params.url), {
+      const response = await fetch(url, {
         method: String(params.method ?? 'GET'),
         headers: asHeaders(params.headers),
         body: typeof params.body === 'string' ? params.body : undefined,
         signal: controller.signal
       });
       const body = await response.text();
+      logger.info('HTTP request completed', {
+        url,
+        status: response.status,
+        sessionId: context?.sessionId
+      });
       return {
         success: true,
         output: JSON.stringify(
@@ -47,6 +92,11 @@ export const httpRequestTool: ToolDefinition = {
         )
       };
     } catch (error) {
+      logger.warn('HTTP request failed', {
+        url,
+        error: String(error),
+        sessionId: context?.sessionId
+      });
       return { success: false, error: String(error) };
     } finally {
       clearTimeout(timer);

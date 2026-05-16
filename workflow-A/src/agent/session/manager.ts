@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { MemoryConfig } from '../../gateway/config/types.js';
 import { SessionNotFoundError } from '../../gateway/utils/errors.js';
 import type { Message, SessionState } from '../../shared/types.js';
+import { randomId } from '../../shared/utils.js';
 import type { Session } from './types.js';
 
 export class SessionManager {
@@ -126,9 +127,5 @@ function reviveSession(session: Session): Session {
       timestamp: new Date(message.timestamp)
     }))
   };
-}
-
-function randomId(): string {
-  return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 

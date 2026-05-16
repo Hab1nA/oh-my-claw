@@ -1,6 +1,7 @@
 import type { GatewayConfig } from '../gateway/config/types.js';
 import { Logger } from '../gateway/utils/logger.js';
 import type { AgentResponse, Message, SessionState } from '../shared/types.js';
+import { randomId } from '../shared/utils.js';
 import type { ModelCaller } from './model/interface.js';
 import { ReactEngine } from './react/engine.js';
 import { ReactState, type ReactContext } from './react/types.js';
@@ -79,9 +80,5 @@ export class AgentRuntimeImpl implements AgentRuntime {
   async abortSession(sessionId: string): Promise<void> {
     await this.options.sessionManager.setStatus(sessionId, 'aborted');
   }
-}
-
-function randomId(): string {
-  return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 

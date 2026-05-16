@@ -96,6 +96,7 @@ export class OpenAICompatibleModelCaller implements ModelCaller {
     };
   }
 
+  // TODO: stub implementation — does not actually stream; falls back to non-streaming call
   async callStream(prompt: ModelPrompt, onChunk: (chunk: string) => void): Promise<void> {
     const response = await this.call(prompt);
     onChunk(response.content);

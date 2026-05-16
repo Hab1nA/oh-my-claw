@@ -4,6 +4,7 @@ export interface ToolRegistryContract {
   registerTool(tool: ToolDefinition): void;
   unregisterTool(name: string): boolean;
   getTool(name: string): ToolDefinition | undefined;
+  hasTool(name: string): boolean;
   listTools(filter?: ToolFilter): ToolDefinition[];
   executeTool(
     name: string,

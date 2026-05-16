@@ -1,4 +1,5 @@
 import type { AgentResponse, Message } from '../../shared/types.js';
+import { randomId } from '../../shared/utils.js';
 import type { ModelCaller, ModelResponse } from '../model/interface.js';
 import { PromptBuilder } from '../prompt/builder.js';
 import type { ToolRegistry } from '../../tools/registry.js';
@@ -110,9 +111,5 @@ export class ReactEngine {
       isImportant: true
     }));
   }
-}
-
-function randomId(): string {
-  return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 

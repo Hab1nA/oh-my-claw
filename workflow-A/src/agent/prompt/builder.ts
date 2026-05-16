@@ -2,15 +2,26 @@ import type { Message } from '../../shared/types.js';
 import type { ToolDefinition } from '../../tools/types.js';
 
 export class PromptBuilder {
+  private systemPromptOverride: string | undefined;
+
+  setSystemPromptOverride(prompt: string): void {
+    this.systemPromptOverride = prompt;
+  }
+
   buildSystemPrompt(tools: ToolDefinition[]): string {
     const toolList = tools
       .map((tool) => `- ${tool.name}: ${tool.description}`)
       .join('\n');
-    return [
+
+    const basePrompt = this.systemPromptOverride ?? [
       'You are OpenClaw-Minimal, a local-first ReAct agent runtime.',
       'Use tools only when they are needed to complete the user task.',
       'When a tool result is returned, reason over the observation and continue until a final answer is ready.',
-      'Never invent tool results. Never request dangerous shell commands.',
+      'Never invent tool results. Never request dangerous shell commands.'
+    ].join('\n');
+
+    return [
+      basePrompt,
       'Available tools:',
       toolList
     ].join('\n');
@@ -29,4 +40,3 @@ export class PromptBuilder {
     return content.slice(0, 6000) + '\n...[content truncated]...\n' + content.slice(-6000);
   }
 }
-

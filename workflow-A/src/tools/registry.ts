@@ -7,10 +7,12 @@ import type {
   ToolRegistryOptions,
   ToolResult
 } from './types.js';
+import { Logger } from '../gateway/utils/logger.js';
 
 export class ToolRegistry implements ToolRegistryContract {
   private readonly tools = new Map<string, ToolDefinition>();
   private readonly allowedPaths: string[];
+  private readonly logger = Logger.getInstance();
 
   constructor(private readonly options: ToolRegistryOptions) {
     this.allowedPaths = options.allowedPaths.map((item) => resolve(item));
@@ -18,7 +20,7 @@ export class ToolRegistry implements ToolRegistryContract {
 
   registerTool(tool: ToolDefinition): void {
     if (this.tools.has(tool.name)) {
-      throw new Error(`Tool already registered: ${tool.name}`);
+      this.logger.warn(`Tool already registered, overwriting: ${tool.name}`);
     }
     this.tools.set(tool.name, tool);
   }
@@ -60,6 +62,9 @@ export class ToolRegistry implements ToolRegistryContract {
       return { success: false, error: validation };
     }
 
+    // 安全注入逻辑：将 ALLOWED_PATHS 和 BLOCKED_COMMANDS 强制注入到 environment 中，
+    // 确保工具执行时始终携带安全约束，防止通过 context?.environment 覆盖这些关键安全配置。
+    // 使用展开运算符先合并外部传入的 environment，再用安全字段覆盖，保证安全策略不可被绕过。
     const fullContext: ToolExecutionContext = {
       sessionId: context?.sessionId ?? 'default',
       userId: context?.userId ?? 'anonymous',
@@ -73,6 +78,10 @@ export class ToolRegistry implements ToolRegistryContract {
     };
 
     return withTimeout(tool.handler(params, fullContext), this.options.timeout, name);
+  }
+
+  hasTool(name: string): boolean {
+    return this.tools.has(name);
   }
 }
 
