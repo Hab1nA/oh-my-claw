@@ -44,7 +44,7 @@ export class ChannelRouterImpl implements ChannelRouter {
 
   async routeMessage(message: NormalizedMessage): Promise<void> {
     try {
-      const sessionId = await this.resolveSession(message);
+      const sessionId = this.resolveSession(message);
       
       const messageWithSession: NormalizedMessage = {
         ...message,
@@ -99,8 +99,8 @@ export class ChannelRouterImpl implements ChannelRouter {
     logger.info('All channel adapters stopped');
   }
 
-  private async resolveSession(message: NormalizedMessage): Promise<string> {
-    const existingSession = await this.findExistingSession(message);
+  private resolveSession(message: NormalizedMessage): string {
+    const existingSession = this.findExistingSession(message);
     if (existingSession) {
       return existingSession;
     }
@@ -108,7 +108,7 @@ export class ChannelRouterImpl implements ChannelRouter {
     return this.createNewSession(message);
   }
 
-  private async findExistingSession(message: NormalizedMessage): Promise<string | undefined> {
+  private findExistingSession(message: NormalizedMessage): string | undefined {
     for (const [sessionId, session] of this.sessions) {
       if (session.userId === message.sender.id && session.channel === message.channel) {
         session.lastActiveAt = new Date();

@@ -25,6 +25,7 @@ export interface MessageContent {
   text?: string;
   url?: string;
   data?: Record<string, unknown>;
+  [key: string]: unknown;
 }
 
 export interface Attachment {
@@ -33,6 +34,7 @@ export interface Attachment {
   filename?: string;
   mimeType?: string;
   size?: number;
+  [key: string]: unknown;
 }
 
 export interface MessageMetadata {
