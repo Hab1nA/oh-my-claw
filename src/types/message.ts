@@ -4,6 +4,7 @@ export interface Message {
   content: string;
   timestamp: Date;
   metadata?: Record<string, unknown>;
+  isImportant?: boolean;
 }
 
 export interface MessageSender {

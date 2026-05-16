@@ -16,6 +16,7 @@ export interface ToolExecutionContext {
   userId: string;
   workingDirectory: string;
   environment: Record<string, string>;
+  toolCallId?: string;
 }
 
 export interface ToolResult {
@@ -49,4 +50,10 @@ export interface ToolCall {
   id: string;
   name: string;
   parameters: Record<string, unknown>;
+}
+
+export interface ToolRegistryOptions {
+  timeout: number;
+  allowedPaths: string[];
+  blockedCommands: string[];
 }

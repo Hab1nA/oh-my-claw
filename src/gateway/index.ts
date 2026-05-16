@@ -1,11 +1,12 @@
 #!/usr/bin/env node
-import { logger } from '../src/utils/index';
-import { ConfigParser } from '../src/config/parser';
-import { ToolRegistryImpl } from '../src/tools/registry';
-import { SkillsLoader } from '../src/tools/skills-loader';
-import { ChannelRouterImpl } from '../src/channels/router';
-import { HeartbeatScheduler } from '../src/heartbeat/scheduler';
-import { Gateway } from '../src/gateway/gateway';
+import { logger } from '../utils/index.js';
+import { ConfigParser } from '../config/parser.js';
+import { ToolRegistryImpl } from '../tools/registry.js';
+import { SkillsLoader } from '../tools/skills-loader.js';
+import { ChannelRouterImpl } from '../channels/router.js';
+import { HeartbeatScheduler } from '../heartbeat/scheduler.js';
+import { Gateway } from './gateway.js';
+import type { NormalizedMessage } from '../types/index.js';
 
 /**
  * OpenClaw Minimal - 集成示例
@@ -30,14 +31,14 @@ async function main() {
     const toolRegistry = new ToolRegistryImpl();
     const skillsLoader = new SkillsLoader(SKILLS_PATH, toolRegistry);
     const channelRouter = new ChannelRouterImpl({
-      async onMessage(message) {
+      async onMessage(message: NormalizedMessage) {
         logger.info('Message received', {
           channel: message.channel,
           sender: message.sender.id
         });
         // 这里会连接到Agent Runtime
       },
-      onError(error) {
+      onError(error: Error) {
         logger.error('Channel error', { error: error.message });
       }
     });

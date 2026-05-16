@@ -9,6 +9,7 @@ export interface Session {
   context: Record<string, unknown>;
   createdAt: Date;
   lastActiveAt: Date;
+  status: 'active' | 'processing' | 'idle' | 'aborted';
   metadata: SessionMetadata;
 }
 
@@ -29,7 +30,7 @@ export interface SessionMetadata {
 
 export interface SessionState {
   sessionId: string;
-  status: 'active' | 'processing' | 'idle';
+  status: 'active' | 'processing' | 'idle' | 'aborted';
   messageCount: number;
   lastMessage?: Date;
 }
@@ -53,5 +54,5 @@ export interface SessionManager {
 export interface SessionFilter {
   userId?: string;
   channel?: string;
-  status?: 'active' | 'processing' | 'idle';
+  status?: 'active' | 'processing' | 'idle' | 'aborted';
 }

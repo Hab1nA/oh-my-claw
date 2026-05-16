@@ -129,6 +129,7 @@ export class ChannelRouterImpl implements ChannelRouter {
       context: {},
       createdAt: new Date(),
       lastActiveAt: new Date(),
+      status: 'active' as const,
       metadata: {}
     };
 

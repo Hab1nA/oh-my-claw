@@ -1,7 +1,8 @@
 import { logger } from '../utils/index';
 import type { NormalizedMessage, OutboundMessage } from '../types/index';
-import type { AgentRuntime, SessionManager } from './runtime.interface';
-import type { ChannelRouter, ChannelRouterImpl } from '../channels/index';
+import type { AgentRuntime } from '../agent/runtime.interface.js';
+import type { SessionManager } from '../types/index.js';
+import type { ChannelRouter } from '../channels/index';
 import type { ToolRegistryImpl } from '../tools/index';
 import type { SkillsLoader } from '../tools/skills-loader';
 import type { ConfigParser } from '../config/parser';
@@ -21,7 +22,7 @@ export class Gateway {
       host: string;
     },
     private channelRouter: ChannelRouter,
-    private toolRegistry: ToolRegistryImpl,
+    _toolRegistry: ToolRegistryImpl,
     private skillsLoader: SkillsLoader,
     private configParser: ConfigParser,
     private heartbeatScheduler: HeartbeatScheduler,
