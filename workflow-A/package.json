@@ -1,0 +1,22 @@
+{
+  "name": "openclaw-minimal-core",
+  "version": "0.1.0",
+  "description": "OpenClaw-Minimal core runtime: gateway, ReAct agent runtime, tools, and session manager.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/gateway/index.js",
+    "dev": "tsx src/gateway/index.ts",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
+
