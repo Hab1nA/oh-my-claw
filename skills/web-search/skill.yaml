@@ -1,0 +1,17 @@
+name: web-search
+version: 1.0.0
+description: Search the web for information
+author: OpenClaw Team
+triggers:
+  - type: keyword
+    keywords:
+      - search
+      - 查找
+      - 搜索
+      - look up
+      - find
+      - google
+tools:
+  - web_search
+permissions:
+  - network

@@ -1,0 +1,16 @@
+name: reminder
+version: 1.0.0
+description: Set and manage reminders and alarms
+author: OpenClaw Team
+triggers:
+  - type: keyword
+    keywords:
+      - remind
+      - 提醒
+      - 闹钟
+      - alarm
+      - schedule
+tools:
+  - set_reminder
+  - list_reminders
+  - cancel_reminder

@@ -1,0 +1,16 @@
+name: weather
+version: 1.0.0
+description: Get weather information for any city
+author: OpenClaw Team
+triggers:
+  - type: keyword
+    keywords:
+      - weather
+      - 温度
+      - 天气
+      - forecast
+      - 气温
+tools:
+  - get_weather
+permissions:
+  - network
