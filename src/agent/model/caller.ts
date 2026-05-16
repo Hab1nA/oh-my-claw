@@ -1,4 +1,4 @@
-import type { AgentConfig } from '../../config/types.js';
+import type { AgentConfig } from '../../types/config.js';
 import type { ToolCall } from '../../types/index.js';
 import type { ToolDefinition } from '../../types/tool.js';
 import type { ModelCaller, ModelPrompt, ModelResponse } from './interface.js';

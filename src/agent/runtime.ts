@@ -1,4 +1,4 @@
-import type { GatewayConfig } from '../config/types.js';
+import type { GatewayConfig } from '../types/config.js';
 import { logger } from '../utils/logger.js';
 import type { AgentResponse, Message, SessionState } from '../types/index.js';
 import { randomId } from '../utils/id.js';
@@ -7,7 +7,7 @@ import { ReactEngine } from './react/engine.js';
 import { ReactState, type ReactContext } from './react/types.js';
 import type { AgentRuntime } from './runtime.interface.js';
 import type { SessionManager } from './session/manager.js';
-import type { ToolRegistryContract } from '../tools/registry.interface.js';
+import type { ToolRegistryContract } from '../tools/registry.js';
 
 interface AgentRuntimeOptions {
   sessionManager: SessionManager;

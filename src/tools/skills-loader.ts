@@ -3,15 +3,15 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import yaml from 'yaml';
 import type { ToolDefinition, SkillDefinition, SkillTrigger, LoadedSkill, SkillModule } from '../types/index.js';
-import type { ToolRegistry } from './registry.js';
+import type { ToolRegistryContract } from './registry.js';
 import { logger, SkillLoadError } from '../utils/index.js';
 
 export class SkillsLoader {
   private skillsPath: string;
-  private toolRegistry: ToolRegistry;
+  private toolRegistry: ToolRegistryContract;
   private skills: Map<string, LoadedSkill> = new Map();
 
-  constructor(skillsPath: string, toolRegistry: ToolRegistry) {
+  constructor(skillsPath: string, toolRegistry: ToolRegistryContract) {
     this.skillsPath = skillsPath;
     this.toolRegistry = toolRegistry;
   }
@@ -28,7 +28,13 @@ export class SkillsLoader {
 
       for (const dir of skillDirs) {
         const skillPath = join(this.skillsPath, dir.name);
-        await this.loadSkill(skillPath, dir.name);
+        try {
+          await this.loadSkill(skillPath, dir.name);
+        } catch (error) {
+          logger.error(`Failed to load skill ${dir.name}, skipping`, {
+            error: (error as Error).message
+          });
+        }
       }
 
       logger.info(`Loaded ${this.skills.size} skills`);
@@ -92,20 +98,20 @@ export class SkillsLoader {
   }
 
   private async loadSkillModule(skillPath: string, skillName: string): Promise<SkillModule | null> {
-    const indexPath = join(skillPath, 'index.ts');
     const indexJsPath = join(skillPath, 'index.js');
+    const indexPath = join(skillPath, 'index.ts');
 
     try {
       let skillModule: SkillModule;
 
-      if (existsSync(indexPath)) {
-        const module = await import(indexPath);
-        skillModule = module.default ?? module;
-      } else if (existsSync(indexJsPath)) {
+      if (existsSync(indexJsPath)) {
         const module = await import(indexJsPath);
         skillModule = module.default ?? module;
+      } else if (existsSync(indexPath)) {
+        const module = await import(indexPath);
+        skillModule = module.default ?? module;
       } else {
-        logger.warn(`Skill ${skillName}: No index.ts/js found, skipping`);
+        logger.warn(`Skill ${skillName}: No index.js/ts found, skipping`);
         return null;
       }
 

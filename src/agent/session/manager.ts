@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { MemoryConfig } from '../../config/types.js';
+import type { MemoryConfig } from '../../types/config.js';
 import { SessionNotFoundError } from '../../utils/errors.js';
 import type { Message, SessionState } from '../../types/index.js';
 import { randomId } from '../../utils/id.js';

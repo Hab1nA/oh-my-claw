@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import YAML from 'yaml';
-import type { GatewayConfig } from './types.js';
+import type { GatewayConfig } from '../types/config.js';
 
 const DEFAULT_CONFIG: GatewayConfig = {
   port: 18789,

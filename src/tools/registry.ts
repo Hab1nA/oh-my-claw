@@ -1,19 +1,43 @@
-import type { ToolDefinition, ToolFilter, ToolResult, ToolExecutionContext } from '../types/index.js';
-import { logger, ToolExecutionError } from '../utils/index.js';
+import { resolve } from 'node:path';
+import type {
+  ToolDefinition,
+  ToolExecutionContext,
+  ToolFilter,
+  ToolRegistryOptions,
+  ToolResult
+} from '../types/tool.js';
+import { logger } from '../utils/logger.js';
 
-export interface ToolRegistry {
+export interface ToolRegistryContract {
   registerTool(tool: ToolDefinition): void;
   unregisterTool(name: string): boolean;
   getTool(name: string): ToolDefinition | undefined;
-  listTools(filter?: ToolFilter): ToolDefinition[];
-  executeTool(name: string, params: Record<string, unknown>, context: ToolExecutionContext): Promise<ToolResult>;
   hasTool(name: string): boolean;
+  listTools(filter?: ToolFilter): ToolDefinition[];
+  executeTool(
+    name: string,
+    params: Record<string, unknown>,
+    context?: Partial<ToolExecutionContext>
+  ): Promise<ToolResult>;
 }
 
-export class ToolRegistryImpl implements ToolRegistry {
-  private tools: Map<string, ToolDefinition> = new Map();
-  private categories: Map<string, Set<string>> = new Map();
-  private tags: Map<string, Set<string>> = new Map();
+const DEFAULT_OPTIONS: ToolRegistryOptions = {
+  timeout: 30000,
+  allowedPaths: ['./workspace'],
+  blockedCommands: ['rm -rf /', 'dd', 'mkfs', 'format', 'shutdown', 'curl|sh', 'wget|sh']
+};
+
+export class ToolRegistry implements ToolRegistryContract {
+  private readonly tools = new Map<string, ToolDefinition>();
+  private readonly categories = new Map<string, Set<string>>();
+  private readonly tags = new Map<string, Set<string>>();
+  private readonly allowedPaths: string[];
+  private readonly options: ToolRegistryOptions;
+
+  constructor(options?: Partial<ToolRegistryOptions>) {
+    this.options = { ...DEFAULT_OPTIONS, ...options };
+    this.allowedPaths = this.options.allowedPaths.map((item) => resolve(item));
+  }
 
   registerTool(tool: ToolDefinition): void {
     if (this.tools.has(tool.name)) {
@@ -46,9 +70,7 @@ export class ToolRegistryImpl implements ToolRegistry {
 
   unregisterTool(name: string): boolean {
     const tool = this.tools.get(name);
-    if (!tool) {
-      return false;
-    }
+    if (!tool) return false;
 
     this.tools.delete(name);
 
@@ -70,18 +92,18 @@ export class ToolRegistryImpl implements ToolRegistry {
     return this.tools.get(name);
   }
 
+  hasTool(name: string): boolean {
+    return this.tools.has(name);
+  }
+
   listTools(filter?: ToolFilter): ToolDefinition[] {
-    if (!filter) {
-      return Array.from(this.tools.values());
-    }
+    if (!filter) return Array.from(this.tools.values());
 
     let toolNames: Set<string> | null = null;
 
     if (filter.category) {
       const categoryTools = this.categories.get(filter.category);
-      if (!categoryTools) {
-        return [];
-      }
+      if (!categoryTools) return [];
       toolNames = new Set(categoryTools);
     }
 
@@ -126,95 +148,45 @@ export class ToolRegistryImpl implements ToolRegistry {
   async executeTool(
     name: string,
     params: Record<string, unknown>,
-    context: ToolExecutionContext
+    context?: Partial<ToolExecutionContext>
   ): Promise<ToolResult> {
     const tool = this.tools.get(name);
     if (!tool) {
-      throw new ToolExecutionError(name, new Error(`Tool not found: ${name}`));
+      return { success: false, error: `Tool not found: ${name}` };
     }
 
-    try {
-      this.validateParameters(tool, params);
-
-      logger.debug(`Executing tool: ${name}`, { params });
-
-      const result = await tool.handler(params, context);
-
-      logger.debug(`Tool execution completed: ${name}`, {
-        success: result.success,
-        hasOutput: !!result.output,
-        hasError: !!result.error
-      });
-
-      return result;
-    } catch (error) {
-      if (error instanceof ToolExecutionError) {
-        throw error;
-      }
-
-      logger.error(`Tool execution failed: ${name}`, {
-        error: (error as Error).message
-      });
-
-      throw new ToolExecutionError(name, error as Error);
-    }
-  }
-
-  hasTool(name: string): boolean {
-    return this.tools.has(name);
-  }
-
-  private validateParameters(tool: ToolDefinition, params: Record<string, unknown>): void {
-    const schema = tool.parameters;
-    const required = schema.required ?? [];
-
-    for (const reqParam of required) {
-      if (params[reqParam] === undefined) {
-        throw new ToolExecutionError(
-          tool.name,
-          new Error(`Missing required parameter: ${reqParam}`)
-        );
-      }
+    const validationError = validateParams(tool, params);
+    if (validationError) {
+      return { success: false, error: validationError };
     }
 
-    for (const [paramName, paramValue] of Object.entries(params)) {
-      const paramDef = schema.properties[paramName];
-      if (!paramDef) {
-        continue;
-      }
+    const fullContext: ToolExecutionContext = {
+      sessionId: context?.sessionId ?? 'default',
+      userId: context?.userId ?? 'anonymous',
+      workingDirectory: context?.workingDirectory ?? process.cwd(),
+      environment: {
+        ...(context?.environment ?? {}),
+        ALLOWED_PATHS: this.allowedPaths.join(';'),
+        BLOCKED_COMMANDS: this.options.blockedCommands.join(';')
+      },
+      toolCallId: context?.toolCallId
+    };
 
-      this.validateParameterType(tool.name, paramName, paramDef.type, paramValue);
+    logger.debug(`Executing tool: ${name}`, { params });
 
-      if (paramDef.enum && !paramDef.enum.includes(paramValue)) {
-        throw new ToolExecutionError(
-          tool.name,
-          new Error(`Parameter ${paramName} must be one of: ${paramDef.enum.join(', ')}`)
-        );
-      }
-    }
-  }
+    const result = await withTimeout(
+      tool.handler(params, fullContext),
+      this.options.timeout,
+      name
+    );
 
-  private validateParameterType(
-    toolName: string,
-    paramName: string,
-    expectedType: string,
-    value: unknown
-  ): void {
-    const actualType = Array.isArray(value) ? 'array' : typeof value;
+    logger.debug(`Tool execution completed: ${name}`, {
+      success: result.success,
+      hasOutput: !!result.output,
+      hasError: !!result.error
+    });
 
-    if (expectedType === 'object' && actualType !== 'object') {
-      throw new ToolExecutionError(
-        toolName,
-        new Error(`Parameter ${paramName} must be an object, got ${actualType}`)
-      );
-    }
-
-    if (expectedType !== 'object' && expectedType !== actualType) {
-      throw new ToolExecutionError(
-        toolName,
-        new Error(`Parameter ${paramName} must be ${expectedType}, got ${actualType}`)
-      );
-    }
+    return result;
   }
 
   getToolCount(): number {
@@ -227,5 +199,51 @@ export class ToolRegistryImpl implements ToolRegistry {
 
   getTags(): string[] {
     return Array.from(this.tags.keys());
+  }
+}
+
+function validateParams(tool: ToolDefinition, params: Record<string, unknown>): string | undefined {
+  for (const required of tool.parameters.required ?? []) {
+    if (!(required in params)) {
+      return `Missing required parameter: ${required}`;
+    }
+  }
+
+  for (const [name, value] of Object.entries(params)) {
+    const schema = tool.parameters.properties[name];
+    if (!schema || value === undefined || value === null) continue;
+    if (!matchesType(value, schema.type)) {
+      return `Invalid parameter type for ${name}: expected ${schema.type}`;
+    }
+    if (schema.enum && !schema.enum.includes(value)) {
+      return `Invalid parameter value for ${name}`;
+    }
+  }
+
+  return undefined;
+}
+
+function matchesType(value: unknown, type: string): boolean {
+  if (type === 'array') return Array.isArray(value);
+  if (type === 'object') return typeof value === 'object' && !Array.isArray(value);
+  return typeof value === type;
+}
+
+async function withTimeout(
+  promise: Promise<ToolResult>,
+  timeout: number,
+  toolName: string
+): Promise<ToolResult> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeoutPromise = new Promise<ToolResult>((resolve) => {
+    timer = setTimeout(() => {
+      resolve({ success: false, error: `Tool timed out: ${toolName}` });
+    }, timeout);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }

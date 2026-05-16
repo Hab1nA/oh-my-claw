@@ -1,8 +1,8 @@
 import type { AgentResponse, Message } from '../../types/index.js';
-import { randomId } from '../../utils/id.js';
+import { randomId, filterEnvVars } from '../../utils/id.js';
 import type { ModelCaller, ModelResponse } from '../model/interface.js';
 import { PromptBuilder } from '../prompt/builder.js';
-import type { ToolRegistryContract } from '../../tools/registry.interface.js';
+import type { ToolRegistryContract } from '../../tools/registry.js';
 import type { ToolResult } from '../../types/tool.js';
 import { ReactState, type ReactContext, type ThinkDecision } from './types.js';
 
@@ -90,7 +90,7 @@ export class ReactEngine {
         sessionId: context.sessionId,
         userId: context.userId,
         workingDirectory: context.workingDirectory,
-        environment: process.env as Record<string, string>,
+        environment: filterEnvVars(process.env),
         toolCallId: toolCall.id
       });
       results.push({ ...result, metadata: { ...result.metadata, toolCallId: toolCall.id, toolName: toolCall.name } });
