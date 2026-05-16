@@ -90,9 +90,6 @@ export class SkillsLoader {
         triggers: config.triggers.length
       });
     } catch (error) {
-      logger.error(`Failed to load skill ${skillName}`, {
-        error: (error as Error).message
-      });
       throw new SkillLoadError(skillName, error as Error);
     }
   }
