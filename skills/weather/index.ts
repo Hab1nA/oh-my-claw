@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { SkillModule } from '../src/types/skill.js';
+import type { SkillModule } from '../../src/types/skill.js';
 
 const WEATHER_API_KEY = process.env.WEATHER_API_KEY ?? '';
 

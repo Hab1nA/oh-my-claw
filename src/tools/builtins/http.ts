@@ -70,14 +70,14 @@ export const httpRequestTool: ToolDefinition = {
     },
     required: ['url']
   },
-  handler: async (params, context: Partial<ToolExecutionContext>): Promise<ToolResult> => {
+  handler: async (params: Record<string, unknown>, context: ToolExecutionContext): Promise<ToolResult> => {
     const url = String(params.url);
 
     if (!isUrlSafe(url)) {
       logger.warn('HTTP request blocked: SSRF protection', {
         url,
-        sessionId: context?.sessionId,
-        userId: context?.userId
+        sessionId: context.sessionId,
+        userId: context.userId
       });
       return { success: false, error: `Request to this URL is blocked by SSRF protection: ${url}` };
     }
@@ -85,8 +85,8 @@ export const httpRequestTool: ToolDefinition = {
     logger.info('HTTP request initiated', {
       url,
       method: String(params.method ?? 'GET'),
-      sessionId: context?.sessionId,
-      userId: context?.userId
+      sessionId: context.sessionId,
+      userId: context.userId
     });
 
     const controller = new AbortController();
@@ -104,7 +104,7 @@ export const httpRequestTool: ToolDefinition = {
       logger.info('HTTP request completed', {
         url,
         status: response.status,
-        sessionId: context?.sessionId
+        sessionId: context.sessionId
       });
       return {
         success: true,
@@ -122,7 +122,7 @@ export const httpRequestTool: ToolDefinition = {
       logger.warn('HTTP request failed', {
         url,
         error: String(error),
-        sessionId: context?.sessionId
+        sessionId: context.sessionId
       });
       return { success: false, error: String(error) };
     } finally {

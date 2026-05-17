@@ -239,6 +239,7 @@ async function withTimeout(
     timer = setTimeout(() => {
       resolve({ success: false, error: `Tool timed out: ${toolName}` });
     }, timeout);
+    timer.unref();
   });
 
   try {

@@ -106,17 +106,18 @@ export class ReactEngine {
   }
 
   private async act(context: ReactContext, toolCalls: Array<{ id: string; name: string; parameters: Record<string, unknown> }>): Promise<ToolResult[]> {
-    const results: ToolResult[] = [];
-    for (const toolCall of toolCalls) {
-      const result = await this.toolRegistry.executeTool(toolCall.name, toolCall.parameters, {
-        sessionId: context.sessionId,
-        userId: context.userId,
-        workingDirectory: context.workingDirectory,
-        environment: filterEnvVars(process.env),
-        toolCallId: toolCall.id
-      });
-      results.push({ ...result, metadata: { ...result.metadata, toolCallId: toolCall.id, toolName: toolCall.name } });
-    }
+    const results = await Promise.all(
+      toolCalls.map(async (toolCall) => {
+        const result = await this.toolRegistry.executeTool(toolCall.name, toolCall.parameters, {
+          sessionId: context.sessionId,
+          userId: context.userId,
+          workingDirectory: context.workingDirectory,
+          environment: filterEnvVars(process.env),
+          toolCallId: toolCall.id
+        });
+        return { ...result, metadata: { ...result.metadata, toolCallId: toolCall.id, toolName: toolCall.name } };
+      })
+    );
     return results;
   }
 

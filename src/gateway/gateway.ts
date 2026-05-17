@@ -131,7 +131,13 @@ export class Gateway {
       role: 'user',
       content: message.content.text || '',
       timestamp: message.timestamp,
-      metadata: { ...message.metadata }
+      metadata: {
+        ...message.metadata,
+        userId: message.sender.id,
+        channel: message.channel,
+        senderName: message.sender.name,
+        senderUsername: message.sender.username
+      }
     };
 
     const sessionId = message.sessionId || await this.ensureSession(message);

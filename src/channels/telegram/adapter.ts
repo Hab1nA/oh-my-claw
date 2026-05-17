@@ -500,7 +500,7 @@ export class TelegramAdapter extends BaseChannelAdapter {
       };
 
       if (message.content.type === 'text') {
-        params['text'] = this.escapeMarkdown(message.content.text ?? '');
+        params['text'] = this.escapeMarkdownV2(message.content.text ?? '');
         
         if (message.replyMarkup) {
           params['reply_markup'] = this.formatReplyMarkup(message.replyMarkup);
@@ -510,28 +510,28 @@ export class TelegramAdapter extends BaseChannelAdapter {
       } else if (message.content.type === 'image') {
         params['photo'] = message.content.url;
         if (message.content.text) {
-          params['caption'] = this.escapeMarkdown(message.content.text);
+          params['caption'] = this.escapeMarkdownV2(message.content.text);
         }
         
         await this.apiCall('sendPhoto', params);
       } else if (message.content.type === 'file') {
         params['document'] = message.content.url;
         if (message.content.text) {
-          params['caption'] = this.escapeMarkdown(message.content.text);
+          params['caption'] = this.escapeMarkdownV2(message.content.text);
         }
         
         await this.apiCall('sendDocument', params);
       } else if (message.content.type === 'audio') {
         params['audio'] = message.content.url;
         if (message.content.text) {
-          params['caption'] = this.escapeMarkdown(message.content.text);
+          params['caption'] = this.escapeMarkdownV2(message.content.text);
         }
         
         await this.apiCall('sendAudio', params);
       } else if (message.content.type === 'video') {
         params['video'] = message.content.url;
         if (message.content.text) {
-          params['caption'] = this.escapeMarkdown(message.content.text);
+          params['caption'] = this.escapeMarkdownV2(message.content.text);
         }
         
         await this.apiCall('sendVideo', params);
@@ -585,11 +585,9 @@ export class TelegramAdapter extends BaseChannelAdapter {
     };
   }
 
-  private escapeMarkdown(text: string): string {
-    const escapeChars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!'];
-    return text.split('').map(char => 
-      escapeChars.includes(char) ? `\\${char}` : char
-    ).join('');
+  private escapeMarkdownV2(text: string): string {
+    // Telegram MarkdownV2 special characters that must be escaped
+    return text.replace(/[\_*\[\]()~`>#+=\|{}.!\-]/g, '\\$&');
   }
 
   private async apiCall<T = unknown>(

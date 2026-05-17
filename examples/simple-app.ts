@@ -6,9 +6,9 @@ import {
   ConfigParser,
   HeartbeatScheduler,
   logger
-} from './src/index.js';
+} from '../src/index.js';
 
-import type { NormalizedMessage } from './src/types/index.js';
+import type { NormalizedMessage } from '../src/types/index.js';
 
 async function main() {
   try {

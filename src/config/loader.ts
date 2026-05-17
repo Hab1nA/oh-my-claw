@@ -17,11 +17,11 @@ const DEFAULT_CONFIG: GatewayConfig = {
   },
   tools: {
     timeout: 30000,
-    allowedPaths: ['./workspace'],
+    allowedPaths: [resolve('./workspace')],
     blockedCommands: ['rm -rf /', 'dd', 'mkfs', 'format', 'shutdown', 'curl|sh', 'wget|sh']
   },
   memory: {
-    storagePath: './data/sessions',
+    storagePath: resolve('./data/sessions'),
     maxHistoryLength: 40
   }
 };

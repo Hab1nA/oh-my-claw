@@ -160,7 +160,7 @@ export class CronParser {
             : domWildcard
               ? parsed.dayOfWeek.includes(dow)
               : dowWildcard
-                ? true
+                ? parsed.dayOfMonth.includes(day)
                 : parsed.dayOfMonth.includes(day) || parsed.dayOfWeek.includes(dow);
 
           if (!dayMatch) continue;
@@ -196,14 +196,29 @@ export class CronParser {
     return values.length === max - min + 1;
   }
 
-  matches(expression: string, date: Date): boolean {
+  matches(expression: string, date: Date, timezone?: string): boolean {
     const parsed = this.parse(expression);
-    
-    const minute = date.getMinutes();
-    const hour = date.getHours();
-    const dayOfMonth = date.getDate();
-    const month = date.getMonth() + 1;
-    const dayOfWeek = date.getDay();
+
+    let minute: number;
+    let hour: number;
+    let dayOfMonth: number;
+    let month: number;
+    let dayOfWeek: number;
+
+    if (timezone) {
+      const tzDate = new Date(date.toLocaleString('en-US', { timeZone: timezone }));
+      minute = tzDate.getMinutes();
+      hour = tzDate.getHours();
+      dayOfMonth = tzDate.getDate();
+      month = tzDate.getMonth() + 1;
+      dayOfWeek = tzDate.getDay();
+    } else {
+      minute = date.getUTCMinutes();
+      hour = date.getUTCHours();
+      dayOfMonth = date.getUTCDate();
+      month = date.getUTCMonth() + 1;
+      dayOfWeek = date.getUTCDay();
+    }
 
     const domWildcard = this.isWildcard(parsed.dayOfMonth, 1, 31);
     const dowWildcard = this.isWildcard(parsed.dayOfWeek, 0, 6);

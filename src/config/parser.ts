@@ -247,6 +247,10 @@ export class ConfigParser {
     };
   }
 
+  /**
+   * @deprecated Use PromptBuilder.buildSystemPromptFromConfig() instead.
+   * Kept for backward compatibility with INTEGRATION.md examples.
+   */
   buildSystemPrompt(soul: SoulConfig, identity: IdentityConfig, user: UserPreferences): string {
     const parts: string[] = [];
 

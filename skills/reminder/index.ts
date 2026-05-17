@@ -1,4 +1,4 @@
-import type { SkillModule } from '../src/types/skill.js';
+import type { SkillModule } from '../../src/types/skill.js';
 
 interface Reminder {
   id: string;

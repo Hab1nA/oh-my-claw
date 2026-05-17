@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { SkillModule } from '../src/types/skill.js';
+import type { SkillModule } from '../../src/types/skill.js';
 
 const SEARCH_API_KEY = process.env.SEARCH_API_KEY ?? '';
 const SEARCH_API_URL = process.env.SEARCH_API_URL ?? 'https://api.duckduckgo.com';

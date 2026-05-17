@@ -18,19 +18,18 @@ interface AgentRuntimeOptions {
 }
 
 export class AgentRuntimeImpl implements AgentRuntime {
-  private readonly engine: ReactEngine;
+  private engine: ReactEngine;
 
   constructor(private readonly options: AgentRuntimeOptions) {
     this.engine = new ReactEngine(options.modelCaller, options.toolRegistry, options.engineConfig);
   }
 
   setEngineConfig(soul: SoulConfig, identity: IdentityConfig, user: UserPreferences): void {
-    const engine = new ReactEngine(
+    this.engine = new ReactEngine(
       this.options.modelCaller,
       this.options.toolRegistry,
       { soul, identity, user }
     );
-    (this as unknown as { engine: ReactEngine }).engine = engine;
   }
 
   async processMessage(sessionId: string, message: Message): Promise<AgentResponse> {
