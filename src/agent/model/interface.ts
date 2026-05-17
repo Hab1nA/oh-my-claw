@@ -16,6 +16,8 @@ export interface ModelPrompt {
 
 export interface ModelResponse {
   content: string;
+  /** DeepSeek thinking-mode reasoning content — must be passed back in subsequent requests. */
+  reasoningContent?: string;
   toolCalls?: ToolCall[];
   finishReason: 'stop' | 'length' | 'tool_calls' | 'error';
   usage?: {

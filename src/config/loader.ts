@@ -3,6 +3,30 @@ import { resolve } from 'node:path';
 import YAML from 'yaml';
 import type { GatewayConfig } from '../types/config.js';
 
+/**
+ * Load `.env` file from project root into process.env (without overwriting existing vars).
+ * Uses only Node.js builtins — zero external dependencies.
+ */
+function loadDotEnv(envPath = resolve('.env')): void {
+  if (!existsSync(envPath)) return;
+  const content = readFileSync(envPath, 'utf-8');
+  for (const rawLine of content.split('\n')) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const eqIdx = line.indexOf('=');
+    if (eqIdx === -1) continue;
+    const key = line.slice(0, eqIdx).trim();
+    let value = line.slice(eqIdx + 1).trim();
+    // Strip surrounding quotes
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    if (!(key in process.env)) {
+      process.env[key] = value;
+    }
+  }
+}
+
 const DEFAULT_CONFIG: GatewayConfig = {
   port: 18789,
   host: '127.0.0.1',
@@ -13,7 +37,7 @@ const DEFAULT_CONFIG: GatewayConfig = {
     baseUrl: 'https://api.deepseek.com',
     maxTokens: 2048,
     temperature: 0.2,
-    maxIterations: 6
+    maxIterations: 20
   },
   tools: {
     timeout: 30000,
@@ -27,6 +51,7 @@ const DEFAULT_CONFIG: GatewayConfig = {
 };
 
 export function loadConfig(configPath = process.env.OPENCLAW_CONFIG): GatewayConfig {
+  loadDotEnv();
   const resolvedPath = resolveConfigPath(configPath);
   const fileConfig = resolvedPath ? readConfigFile(resolvedPath) : {};
   const config = mergeConfig(DEFAULT_CONFIG, fileConfig);
@@ -79,6 +104,7 @@ function applyEnvOverrides(config: GatewayConfig): void {
   if (process.env.OPENCLAW_API_KEY) config.agent.apiKey = process.env.OPENCLAW_API_KEY;
   if (process.env.OPENCLAW_BASE_URL) config.agent.baseUrl = process.env.OPENCLAW_BASE_URL;
   if (process.env.OPENCLAW_MODEL) config.agent.model = process.env.OPENCLAW_MODEL;
+  if (process.env.OPENCLAW_MAX_ITERATIONS) config.agent.maxIterations = Number(process.env.OPENCLAW_MAX_ITERATIONS);
 }
 
 function validateConfig(config: GatewayConfig): void {

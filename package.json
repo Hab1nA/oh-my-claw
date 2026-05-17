@@ -8,6 +8,7 @@
     "build": "tsc",
     "dev": "tsx examples/simple-app.ts",
     "demo": "tsx examples/standalone-demo.ts",
+    "dev:tui": "tsx examples/tui-app.ts",
     "dev:src": "tsx src/index.ts",
     "dev:gateway": "tsx src/gateway/index.ts",
     "start": "node dist/index.js",

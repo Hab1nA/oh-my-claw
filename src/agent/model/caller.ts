@@ -7,6 +7,8 @@ import { logger } from '../../utils/logger.js';
 interface OpenAIMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
+  /** DeepSeek thinking-mode reasoning content. */
+  reasoning_content?: string;
   tool_call_id?: string;
   tool_calls?: Array<{
     id: string;
@@ -31,6 +33,8 @@ interface OpenAIResponse {
   choices?: Array<{
     message?: {
       content?: string | null;
+      /** DeepSeek thinking-mode reasoning content. */
+      reasoning_content?: string | null;
       tool_calls?: OpenAIToolCall[];
     };
     finish_reason?: string;
@@ -90,8 +94,10 @@ export class OpenAICompatibleModelCaller implements ModelCaller {
       const choice = data.choices?.[0];
       const message = choice?.message;
       const toolCalls = parseToolCalls(message?.tool_calls ?? []);
+      const reasoningContent = message?.reasoning_content ?? undefined;
       return {
         content: message?.content ?? '',
+        reasoningContent,
         toolCalls,
         finishReason: toolCalls.length > 0 ? 'tool_calls' : normalizeFinishReason(choice?.finish_reason),
         usage: data.usage
@@ -139,6 +145,10 @@ export class OpenAICompatibleModelCaller implements ModelCaller {
         });
       } else {
         const openAiMessage: OpenAIMessage = { role: message.role, content: message.content };
+        // Pass back DeepSeek thinking-mode reasoning_content if present
+        if (message.role === 'assistant' && message.metadata?.reasoningContent) {
+          openAiMessage.reasoning_content = String(message.metadata.reasoningContent);
+        }
         const toolCalls = asToolCalls(message.metadata?.toolCalls);
         if (message.role === 'assistant' && toolCalls.length > 0) {
           openAiMessage.tool_calls = toolCalls.map((toolCall) => ({

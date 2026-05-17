@@ -83,7 +83,9 @@ export class ReactEngine {
       timestamp: new Date(),
       metadata: {
         finishReason: response.finishReason,
-        toolCalls: response.toolCalls
+        toolCalls: response.toolCalls,
+        // Preserve DeepSeek thinking-mode reasoning_content for subsequent API calls
+        ...(response.reasoningContent ? { reasoningContent: response.reasoningContent } : {})
       }
     });
 

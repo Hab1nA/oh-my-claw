@@ -17,6 +17,7 @@ export class PromptBuilder {
       'You are OpenClaw-Minimal, a local-first ReAct agent runtime.',
       'Use tools only when they are needed to complete the user task.',
       'When a tool result is returned, reason over the observation and continue until a final answer is ready.',
+      'If a tool call fails, do NOT retry the same approach. Try a different tool or answer based on what you already know.',
       'Never invent tool results. Never request dangerous shell commands.'
     ].join('\n');
 
@@ -73,6 +74,7 @@ export class PromptBuilder {
     parts.push('\n# Instructions');
     parts.push('Use tools only when they are needed to complete the user task.');
     parts.push('When a tool result is returned, reason over the observation and continue until a final answer is ready.');
+    parts.push('If a tool call fails, do NOT retry the same approach. Try a different tool or answer based on what you already know.');
     parts.push('Never invent tool results. Never request dangerous shell commands.');
 
     return this.systemPromptOverride ?? parts.join('\n');
