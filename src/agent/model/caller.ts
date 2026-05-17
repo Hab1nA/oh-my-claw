@@ -2,6 +2,7 @@ import type { AgentConfig } from '../../types/config.js';
 import type { ToolCall } from '../../types/index.js';
 import type { ToolDefinition } from '../../types/tool.js';
 import type { ModelCaller, ModelPrompt, ModelResponse } from './interface.js';
+import { logger } from '../../utils/logger.js';
 
 interface OpenAIMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -47,6 +48,8 @@ interface OpenAIResponse {
 export class OpenAICompatibleModelCaller implements ModelCaller {
   constructor(private readonly config: AgentConfig) {}
 
+  private static readonly CALL_TIMEOUT_MS = 120_000;
+
   async call(prompt: ModelPrompt): Promise<ModelResponse> {
     if (!this.config.apiKey) {
       return {
@@ -55,49 +58,68 @@ export class OpenAICompatibleModelCaller implements ModelCaller {
       };
     }
 
-    const response = await fetch(`${this.baseUrl()}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${this.config.apiKey}`,
-        'content-type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: this.config.model,
-        temperature: prompt.temperature ?? this.config.temperature,
-        max_tokens: prompt.maxTokens ?? this.config.maxTokens,
-        messages: this.toOpenAIMessages(prompt),
-        tools: prompt.tools?.map(toOpenAITool),
-        tool_choice: prompt.tools?.length ? 'auto' : undefined
-      })
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), OpenAICompatibleModelCaller.CALL_TIMEOUT_MS);
 
-    const data = (await response.json()) as OpenAIResponse;
-    if (!response.ok) {
+    try {
+      const response = await fetch(`${this.baseUrl()}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${this.config.apiKey}`,
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: this.config.model,
+          temperature: prompt.temperature ?? this.config.temperature,
+          max_tokens: prompt.maxTokens ?? this.config.maxTokens,
+          messages: this.toOpenAIMessages(prompt),
+          tools: prompt.tools?.map(toOpenAITool),
+          tool_choice: prompt.tools?.length ? 'auto' : undefined
+        }),
+        signal: controller.signal
+      });
+
+      const data = (await response.json()) as OpenAIResponse;
+      if (!response.ok) {
+        return {
+          content: data.error?.message ?? `Model API failed with HTTP ${response.status}`,
+          finishReason: 'error'
+        };
+      }
+
+      const choice = data.choices?.[0];
+      const message = choice?.message;
+      const toolCalls = parseToolCalls(message?.tool_calls ?? []);
       return {
-        content: data.error?.message ?? `Model API failed with HTTP ${response.status}`,
+        content: message?.content ?? '',
+        toolCalls,
+        finishReason: toolCalls.length > 0 ? 'tool_calls' : normalizeFinishReason(choice?.finish_reason),
+        usage: data.usage
+          ? {
+              promptTokens: data.usage.prompt_tokens ?? 0,
+              completionTokens: data.usage.completion_tokens ?? 0,
+              totalTokens: data.usage.total_tokens ?? 0
+            }
+          : undefined
+      };
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return {
+          content: 'Model API call timed out',
+          finishReason: 'error'
+        };
+      }
+      return {
+        content: `Model API call failed: ${(error as Error).message}`,
         finishReason: 'error'
       };
+    } finally {
+      clearTimeout(timer);
     }
-
-    const choice = data.choices?.[0];
-    const message = choice?.message;
-    const toolCalls = parseToolCalls(message?.tool_calls ?? []);
-    return {
-      content: message?.content ?? '',
-      toolCalls,
-      finishReason: toolCalls.length > 0 ? 'tool_calls' : normalizeFinishReason(choice?.finish_reason),
-      usage: data.usage
-        ? {
-            promptTokens: data.usage.prompt_tokens ?? 0,
-            completionTokens: data.usage.completion_tokens ?? 0,
-            totalTokens: data.usage.total_tokens ?? 0
-          }
-        : undefined
-    };
   }
 
-  // TODO: stub implementation — does not actually stream; falls back to non-streaming call
   async callStream(prompt: ModelPrompt, onChunk: (chunk: string) => void): Promise<void> {
+    logger.warn('callStream is a stub — falling back to non-streaming call');
     const response = await this.call(prompt);
     onChunk(response.content);
   }

@@ -8,27 +8,46 @@ import type { Session } from './types.js';
 
 export class SessionManager {
   private readonly sessions = new Map<string, Session>();
+  private readonly locks = new Map<string, Promise<void>>();
 
   constructor(private readonly config: MemoryConfig) {}
 
-  async getOrCreateSession(sessionId: string, userId = 'anonymous', channel = 'direct'): Promise<Session> {
-    const existing = await this.getSession(sessionId);
-    if (existing) return existing;
+  private async withLock<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
+    const prev = this.locks.get(sessionId) ?? Promise.resolve();
+    let release!: () => void;
+    const next = new Promise<void>((resolve) => { release = resolve; });
+    this.locks.set(sessionId, next);
+    await prev;
+    try {
+      return await fn();
+    } finally {
+      release();
+      if (this.locks.get(sessionId) === next) {
+        this.locks.delete(sessionId);
+      }
+    }
+  }
 
-    const session: Session = {
-      id: sessionId,
-      userId,
-      channel,
-      messages: [],
-      context: {},
-      createdAt: new Date(),
-      lastActiveAt: new Date(),
-      status: 'idle',
-      metadata: {}
-    };
-    this.sessions.set(session.id, session);
-    await this.persistSession(session);
-    return session;
+  async getOrCreateSession(sessionId: string, userId = 'anonymous', channel = 'direct'): Promise<Session> {
+    return this.withLock(sessionId, async () => {
+      const existing = await this.getSession(sessionId);
+      if (existing) return existing;
+
+      const session: Session = {
+        id: sessionId,
+        userId,
+        channel,
+        messages: [],
+        context: {},
+        createdAt: new Date(),
+        lastActiveAt: new Date(),
+        status: 'idle',
+        metadata: {}
+      };
+      this.sessions.set(session.id, session);
+      await this.persistSession(session);
+      return session;
+    });
   }
 
   async createSession(userId: string, channel: string): Promise<Session> {
@@ -52,25 +71,31 @@ export class SessionManager {
   }
 
   async addMessage(sessionId: string, message: Message): Promise<void> {
-    const session = await this.requireSession(sessionId);
-    session.messages.push(message);
-    session.lastActiveAt = new Date();
-    session.messages = this.truncateHistory(session.messages);
-    await this.persistSession(session);
+    return this.withLock(sessionId, async () => {
+      const session = await this.requireSession(sessionId);
+      session.messages.push(message);
+      session.lastActiveAt = new Date();
+      session.messages = this.truncateHistory(session.messages);
+      await this.persistSession(session);
+    });
   }
 
   async replaceMessages(sessionId: string, messages: Message[]): Promise<void> {
-    const session = await this.requireSession(sessionId);
-    session.messages = this.truncateHistory(messages);
-    session.lastActiveAt = new Date();
-    await this.persistSession(session);
+    return this.withLock(sessionId, async () => {
+      const session = await this.requireSession(sessionId);
+      session.messages = this.truncateHistory(messages);
+      session.lastActiveAt = new Date();
+      await this.persistSession(session);
+    });
   }
 
   async setStatus(sessionId: string, status: SessionState['status']): Promise<void> {
-    const session = await this.requireSession(sessionId);
-    session.status = status;
-    session.lastActiveAt = new Date();
-    await this.persistSession(session);
+    return this.withLock(sessionId, async () => {
+      const session = await this.requireSession(sessionId);
+      session.status = status;
+      session.lastActiveAt = new Date();
+      await this.persistSession(session);
+    });
   }
 
   async getState(sessionId: string): Promise<SessionState> {

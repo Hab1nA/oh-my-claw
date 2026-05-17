@@ -10,11 +10,40 @@ const BLOCKED_HOSTS = [
   'metadata.google.internal'
 ];
 
+const PRIVATE_IP_PATTERNS: Array<{ test: (ip: string) => boolean }> = [
+  { test: (ip) => ip === '0.0.0.0' },
+  { test: (ip) => /^(10\.|127\.)/.test(ip) },
+  { test: (ip) => /^172\.(1[6-9]|2\d|3[0-1])\./.test(ip) },
+  { test: (ip) => /^192\.168\./.test(ip) },
+  { test: (ip) => /^169\.254\./.test(ip) },
+  { test: (ip) => /^fc00:/i.test(ip) },
+  { test: (ip) => /^fe80:/i.test(ip) },
+  { test: (ip) => /^::1$/i.test(ip) },
+  { test: (ip) => /^0+:*:?0*$/.test(ip) },
+];
+
+function isPrivateIp(ip: string): boolean {
+  return PRIVATE_IP_PATTERNS.some((p) => p.test(ip));
+}
+
 function isUrlSafe(url: string): boolean {
   try {
     const parsed = new URL(url);
     const hostname = parsed.hostname.toLowerCase();
-    return !BLOCKED_HOSTS.some((blocked) => hostname === blocked || hostname.endsWith('.' + blocked));
+
+    if (!parsed.protocol || !['http:', 'https:'].includes(parsed.protocol)) {
+      return false;
+    }
+
+    if (BLOCKED_HOSTS.some((blocked) => hostname === blocked || hostname.endsWith('.' + blocked))) {
+      return false;
+    }
+
+    if (isPrivateIp(hostname)) {
+      return false;
+    }
+
+    return true;
   } catch {
     return false;
   }

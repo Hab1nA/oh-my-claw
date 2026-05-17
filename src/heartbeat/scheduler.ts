@@ -112,27 +112,53 @@ export class HeartbeatScheduler {
     logger.info('Heartbeat scheduler stopped');
   }
 
+  private runningTasks = new Set<string>();
+
   private async checkAndExecuteTasks(): Promise<void> {
     const now = new Date();
 
     for (const [taskId, scheduledTask] of this.tasks) {
       if (!scheduledTask.task.enabled) continue;
+      if (this.runningTasks.has(taskId)) continue;
 
       if (scheduledTask.nextRun <= now) {
-        await this.executeTask(scheduledTask);
-
-        scheduledTask.lastRun = now;
-        try {
-          scheduledTask.nextRun = this.cronParser.getNextRun(
-            scheduledTask.task.schedule,
-            scheduledTask.task.timezone
-          );
-        } catch (error) {
-          logger.error(`Failed to calculate next run for task: ${taskId}`, {
-            error: (error as Error).message
+        this.runningTasks.add(taskId);
+        this.executeTask(scheduledTask)
+          .then(() => {
+            scheduledTask.lastRun = now;
+            try {
+              scheduledTask.nextRun = this.cronParser.getNextRun(
+                scheduledTask.task.schedule,
+                scheduledTask.task.timezone
+              );
+            } catch (error) {
+              logger.error(`Failed to calculate next run for task: ${taskId}`, {
+                error: (error as Error).message
+              });
+              scheduledTask.task.enabled = false;
+            }
+          })
+          .catch((error: unknown) => {
+            logger.error(`Heartbeat task execution failed: ${scheduledTask.task.name}`, {
+              error: (error as Error).message
+            });
+            scheduledTask.lastResult = {
+              success: false,
+              executedAt: new Date(),
+              error: (error as Error).message
+            };
+            try {
+              scheduledTask.nextRun = this.cronParser.getNextRun(
+                scheduledTask.task.schedule,
+                scheduledTask.task.timezone
+              );
+            } catch {
+              scheduledTask.task.enabled = false;
+            }
+          })
+          .finally(() => {
+            this.runningTasks.delete(taskId);
           });
-          scheduledTask.task.enabled = false;
-        }
       }
     }
   }

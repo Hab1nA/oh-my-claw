@@ -57,7 +57,7 @@ function readConfigFile(filePath: string): Partial<GatewayConfig> {
 }
 
 function expandEnv(input: string): string {
-  return input.replace(/\$\{([A-Z0-9_]+)\}/g, (_, name: string) => process.env[name] ?? '');
+  return input.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, name: string) => process.env[name] ?? '');
 }
 
 function mergeConfig(base: GatewayConfig, override: Partial<GatewayConfig>): GatewayConfig {

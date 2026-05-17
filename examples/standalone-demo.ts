@@ -1,17 +1,12 @@
 #!/usr/bin/env ts-node
-import { logger } from '../src/utils/index';
-import { ConfigParser } from '../src/config/parser';
-import { ToolRegistryImpl } from '../src/tools/registry';
-import { SkillsLoader } from '../src/tools/skills-loader';
-import { ChannelRouterImpl } from '../src/channels/router';
-import { HeartbeatScheduler } from '../src/heartbeat/scheduler';
-import type { NormalizedMessage } from '../src/types/index';
-
-/**
- * OpenClaw Minimal - 独立运行示例（无任务流甲依赖）
- *
- * 这个示例展示了仅使用任务流乙组件的运行方式
- */
+import { logger } from '../src/utils/index.js';
+import { ConfigParser } from '../src/config/parser.js';
+import { ToolRegistry } from '../src/tools/registry.js';
+import { SkillsLoader } from '../src/tools/skills-loader.js';
+import { ChannelRouterImpl } from '../src/channels/router.js';
+import { HeartbeatScheduler } from '../src/heartbeat/scheduler.js';
+import type { NormalizedMessage } from '../src/types/index.js';
+import type { MessageHandler } from '../src/channels/types.js';
 
 async function main() {
   console.log('\n╔════════════════════════════════════════╗');
@@ -24,13 +19,11 @@ async function main() {
 
     logger.info('Initializing OpenClaw components...');
 
-    // 初始化组件
     const configParser = new ConfigParser(CONFIG_PATH);
-    const toolRegistry = new ToolRegistryImpl();
+    const toolRegistry = new ToolRegistry();
     const skillsLoader = new SkillsLoader(SKILLS_PATH, toolRegistry);
 
-    // 创建消息处理器
-    const messageHandler = {
+    const messageHandler: MessageHandler = {
       async onMessage(message: NormalizedMessage) {
         logger.info('Message received', {
           channel: message.channel,
@@ -38,11 +31,9 @@ async function main() {
           text: message.content.text?.substring(0, 100)
         });
 
-        // 简单的回显逻辑
         const text = message.content.text;
         let responseText = '收到你的消息！';
 
-        // 检查是否有匹配的技能
         const matchedSkills = skillsLoader.findMatchingSkills(text || '');
         if (matchedSkills.length > 0) {
           responseText = `我发现你可能需要这些技能: ${matchedSkills.map(s => s.name).join(', ')}`;
@@ -55,10 +46,9 @@ async function main() {
       }
     };
 
-    const channelRouter = new ChannelRouterImpl(messageHandler as any);
-    const heartbeatScheduler = new HeartbeatScheduler(toolRegistry, channelRouter as any);
+    const channelRouter = new ChannelRouterImpl(messageHandler);
+    const heartbeatScheduler = new HeartbeatScheduler(toolRegistry, channelRouter);
 
-    // 加载配置
     const configs = await configParser.parseAll();
     logger.info('Configuration loaded', {
       soul: !!configs.soul,
@@ -66,15 +56,12 @@ async function main() {
       user: !!configs.user
     });
 
-    // 加载技能
     await skillsLoader.loadAll();
     logger.info('Skills loaded', { count: skillsLoader.getSkillCount() });
 
-    // 加载Heartbeat任务
     await heartbeatScheduler.loadTasks(CONFIG_PATH);
     logger.info('Heartbeat tasks loaded', { count: heartbeatScheduler.listTasks().length });
 
-    // 打印状态
     console.log('\n✅ Components initialized successfully!');
     console.log('\n📊 System status:');
     console.log('   - Config Parser: ready');
@@ -83,7 +70,6 @@ async function main() {
     console.log('   - Channel Router: ready');
     console.log('   - Heartbeat Scheduler: ready');
 
-    // 打印加载的技能
     const skills = skillsLoader.listSkills();
     if (skills.length > 0) {
       console.log('\n📦 Loaded skills:');
@@ -92,7 +78,6 @@ async function main() {
       });
     }
 
-    // 打印Heartbeat任务
     const tasks = heartbeatScheduler.listTasks();
     if (tasks.length > 0) {
       console.log('\n⏰ Heartbeat tasks:');
@@ -105,7 +90,6 @@ async function main() {
     console.log('   To use the full OpenClaw functionality, connect a channel adapter');
     console.log('   or implement the Agent Runtime (task flow 1)\n');
 
-    // 设置优雅关闭
     process.on('SIGINT', async () => {
       logger.info('\nShutting down...');
       process.exit(0);
