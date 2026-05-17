@@ -14,7 +14,8 @@
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "test": "jest --forceExit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "rebuild": "pwsh -File rebuild.ps1"
   },
   "keywords": [
     "ai",

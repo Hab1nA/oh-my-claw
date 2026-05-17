@@ -348,12 +348,17 @@ npm run typecheck
 # 构建（输出到 dist/）
 npm run build
 
+# 重新编译（清理 → 构建 → 清理中间文件）
+npm run rebuild
+
 # 运行测试
 npm test
 
 # 清理构建产物
 npm run clean
 ```
+
+> **关于 `rebuild`**：执行完整的重新编译流程——先清空 `dist/`，再运行 `tsc` 构建，最后删除临时中间文件（`.js.map`、`.d.ts.map`），仅保留结果文件（`.js`、`.d.ts`）。也可以直接运行 `pwsh -File rebuild.ps1`。
 
 ### 项目结构
 
