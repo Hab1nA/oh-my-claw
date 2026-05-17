@@ -1,16 +1,23 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { NormalizedMessage, Session } from '../types/index.js';
+import type { NormalizedMessage } from '../types/index.js';
 import type { BaseChannelAdapter } from './adapter.js';
 import type { MessageHandler, ChannelRouter } from './types.js';
+import type { SessionManager } from '../agent/session/manager.js';
 import { logger } from '../utils/index.js';
 
 export class ChannelRouterImpl implements ChannelRouter {
   private adapters: Map<string, BaseChannelAdapter> = new Map();
   private messageHandler: MessageHandler;
-  private sessions: Map<string, Session> = new Map();
+  private sessionIndex: Map<string, string> = new Map();
+  private sessionManager?: SessionManager;
 
-  constructor(messageHandler: MessageHandler) {
+  constructor(messageHandler: MessageHandler, sessionManager?: SessionManager) {
     this.messageHandler = messageHandler;
+    this.sessionManager = sessionManager;
+  }
+
+  setSessionManager(sessionManager: SessionManager): void {
+    this.sessionManager = sessionManager;
   }
 
   registerAdapter(adapter: BaseChannelAdapter): void {
@@ -44,7 +51,7 @@ export class ChannelRouterImpl implements ChannelRouter {
 
   async routeMessage(message: NormalizedMessage): Promise<void> {
     try {
-      const sessionId = this.resolveSession(message);
+      const sessionId = await this.resolveSession(message);
       
       const messageWithSession: NormalizedMessage = {
         ...message,
@@ -99,63 +106,42 @@ export class ChannelRouterImpl implements ChannelRouter {
     logger.info('All channel adapters stopped');
   }
 
-  private resolveSession(message: NormalizedMessage): string {
-    const existingSession = this.findExistingSession(message);
-    if (existingSession) {
-      return existingSession;
+  private async resolveSession(message: NormalizedMessage): Promise<string> {
+    const indexKey = `${message.channel}:${message.sender.id}`;
+    const existingSessionId = this.sessionIndex.get(indexKey);
+    if (existingSessionId) {
+      return existingSessionId;
     }
 
-    return this.createNewSession(message);
-  }
-
-  private findExistingSession(message: NormalizedMessage): string | undefined {
-    for (const [sessionId, session] of this.sessions) {
-      if (session.userId === message.sender.id && session.channel === message.channel) {
-        session.lastActiveAt = new Date();
-        return sessionId;
-      }
-    }
-    return undefined;
-  }
-
-  private createNewSession(message: NormalizedMessage): string {
     const sessionId = uuidv4();
-    
-    const session: Session = {
-      id: sessionId,
-      userId: message.sender.id,
-      channel: message.channel,
-      messages: [],
-      context: {},
-      createdAt: new Date(),
-      lastActiveAt: new Date(),
-      status: 'active' as const,
-      metadata: {}
-    };
+    this.sessionIndex.set(indexKey, sessionId);
 
-    this.sessions.set(sessionId, session);
+    if (this.sessionManager) {
+      await this.sessionManager.getOrCreateSession(
+        sessionId,
+        message.sender.id,
+        message.channel
+      );
+    }
+
     logger.debug('Created new session', { sessionId, userId: message.sender.id, channel: message.channel });
-    
     return sessionId;
   }
 
-  getSession(sessionId: string): Session | undefined {
-    return this.sessions.get(sessionId);
-  }
+  async cleanInactiveSessions(maxInactiveMs: number): Promise<number> {
+    if (!this.sessionManager) return 0;
 
-  listActiveSessions(): Session[] {
-    return Array.from(this.sessions.values());
-  }
-
-  cleanInactiveSessions(maxInactiveMs: number): number {
     const now = Date.now();
     let cleaned = 0;
 
-    for (const [sessionId, session] of this.sessions) {
-      const inactiveTime = now - session.lastActiveAt.getTime();
-      if (inactiveTime > maxInactiveMs) {
-        this.sessions.delete(sessionId);
-        cleaned++;
+    for (const [indexKey, sessionId] of this.sessionIndex) {
+      const session = await this.sessionManager.getSession(sessionId);
+      if (session) {
+        const inactiveTime = now - session.lastActiveAt.getTime();
+        if (inactiveTime > maxInactiveMs) {
+          this.sessionIndex.delete(indexKey);
+          cleaned++;
+        }
       }
     }
 

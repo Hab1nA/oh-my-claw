@@ -1,4 +1,4 @@
-import type { AgentResponse, Message } from '../../types/index.js';
+import type { AgentResponse, IdentityConfig, Message, SoulConfig, UserPreferences } from '../../types/index.js';
 import { randomId, filterEnvVars } from '../../utils/id.js';
 import type { ModelCaller, ModelResponse } from '../model/interface.js';
 import { PromptBuilder } from '../prompt/builder.js';
@@ -6,13 +6,23 @@ import type { ToolRegistryContract } from '../../tools/registry.js';
 import type { ToolResult } from '../../types/tool.js';
 import { ReactState, type ReactContext, type ThinkDecision } from './types.js';
 
+export interface ReactEngineConfig {
+  soul?: SoulConfig;
+  identity?: IdentityConfig;
+  user?: UserPreferences;
+}
+
 export class ReactEngine {
   private readonly promptBuilder = new PromptBuilder();
+  private readonly engineConfig: ReactEngineConfig;
 
   constructor(
     private readonly modelCaller: ModelCaller,
-    private readonly toolRegistry: ToolRegistryContract
-  ) {}
+    private readonly toolRegistry: ToolRegistryContract,
+    engineConfig?: ReactEngineConfig
+  ) {
+    this.engineConfig = engineConfig ?? {};
+  }
 
   async run(context: ReactContext): Promise<AgentResponse> {
     while (
@@ -47,9 +57,21 @@ export class ReactEngine {
     };
   }
 
+  private buildSystemPrompt(tools: import('../../types/tool.js').ToolDefinition[]): string {
+    if (this.engineConfig.soul && this.engineConfig.identity && this.engineConfig.user) {
+      return this.promptBuilder.buildSystemPromptFromConfig(
+        this.engineConfig.soul,
+        this.engineConfig.identity,
+        this.engineConfig.user,
+        tools
+      );
+    }
+    return this.promptBuilder.buildSystemPrompt(tools);
+  }
+
   private async think(context: ReactContext): Promise<ThinkDecision> {
     const response = await this.modelCaller.call({
-      system: this.promptBuilder.buildSystemPrompt(context.tools),
+      system: this.buildSystemPrompt(context.tools),
       messages: this.promptBuilder.buildMessages(context.messages),
       tools: context.tools
     });

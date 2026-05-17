@@ -1,20 +1,19 @@
 import {
   TelegramAdapter,
   ChannelRouterImpl,
-  ToolRegistryImpl,
+  ToolRegistry,
   SkillsLoader,
   ConfigParser,
   HeartbeatScheduler,
   logger
-} from './src';
+} from './src/index.js';
 
-import type { NormalizedMessage } from './src/types';
+import type { NormalizedMessage } from './src/types/index.js';
 
 async function main() {
   try {
     logger.info('Starting OpenClaw Minimal...');
 
-    // Step 1: Initialize config parser
     const configParser = new ConfigParser('./config');
     const configs = await configParser.parseAll();
 
@@ -24,16 +23,13 @@ async function main() {
       user: !!configs.user
     });
 
-    // Step 2: Initialize tool registry
-    const toolRegistry = new ToolRegistryImpl();
+    const toolRegistry = new ToolRegistry();
     logger.info('Tool registry initialized');
 
-    // Step 3: Load skills from skills directory
     const skillsLoader = new SkillsLoader('./skills', toolRegistry);
     await skillsLoader.loadAll();
     logger.info('Skills loaded', { count: skillsLoader.getSkillCount() });
 
-    // Step 4: Create message handler
     const messageHandler = {
       async onMessage(message: NormalizedMessage) {
         logger.info('Received message', {
@@ -43,27 +39,21 @@ async function main() {
           content: message.content.text?.substring(0, 50)
         });
 
-        // Check if message matches any skill triggers
         const matchedSkills = skillsLoader.findMatchingSkills(message.content.text || '');
         if (matchedSkills.length > 0) {
           logger.info('Matched skills', {
             skills: matchedSkills.map(s => s.name)
           });
         }
-
-        // TODO: Pass message to AgentRuntime
-        // For now, just log it
       },
       onError(error: Error) {
         logger.error('Message handler error', { error: error.message });
       }
     };
 
-    // Step 5: Initialize channel router
     const channelRouter = new ChannelRouterImpl(messageHandler);
     logger.info('Channel router initialized');
 
-    // Step 6: Register Telegram adapter (if configured)
     if (process.env.TELEGRAM_BOT_TOKEN) {
       const telegramConfig = {
         botToken: process.env.TELEGRAM_BOT_TOKEN,
@@ -80,19 +70,16 @@ async function main() {
       logger.info('Telegram adapter registered');
     }
 
-    // Step 7: Initialize heartbeat scheduler
     const heartbeatScheduler = new HeartbeatScheduler(toolRegistry, channelRouter);
     await heartbeatScheduler.loadTasks('./config');
     logger.info('Heartbeat scheduler initialized', {
       taskCount: heartbeatScheduler.listTasks().length
     });
 
-    // Step 8: Start everything
     await channelRouter.startAll();
     heartbeatScheduler.start();
     logger.info('OpenClaw Minimal started successfully!');
 
-    // Handle graceful shutdown
     process.on('SIGINT', async () => {
       logger.info('Shutting down...');
       heartbeatScheduler.stop();
@@ -106,5 +93,4 @@ async function main() {
   }
 }
 
-// Run the application
 main();

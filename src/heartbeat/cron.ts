@@ -140,17 +140,30 @@ export class CronParser {
     const tzOffset = timezone ? this.getTimezoneOffset(timezone) : 0;
     const adjustedNow = new Date(now.getTime() + tzOffset);
 
+    const domWildcard = this.isWildcard(parsed.dayOfMonth, 1, 31);
+    const dowWildcard = this.isWildcard(parsed.dayOfWeek, 0, 6);
+
     for (let year = adjustedNow.getFullYear(); year < adjustedNow.getFullYear() + 5; year++) {
       for (const month of parsed.month) {
         const daysInMonth = new Date(year, month, 0).getDate();
-        
-        for (const day of parsed.dayOfMonth) {
-          if (day > daysInMonth) continue;
 
+        const daysToCheck = domWildcard
+          ? Array.from({ length: daysInMonth }, (_, i) => i + 1)
+          : parsed.dayOfMonth.filter(d => d <= daysInMonth);
+
+        for (const day of daysToCheck) {
           const date = new Date(year, month - 1, day);
           const dow = date.getDay();
 
-          if (!parsed.dayOfWeek.includes(dow)) continue;
+          const dayMatch = domWildcard && dowWildcard
+            ? true
+            : domWildcard
+              ? parsed.dayOfWeek.includes(dow)
+              : dowWildcard
+                ? true
+                : parsed.dayOfMonth.includes(day) || parsed.dayOfWeek.includes(dow);
+
+          if (!dayMatch) continue;
 
           for (const hour of parsed.hour) {
             for (const minute of parsed.minute) {
@@ -179,6 +192,10 @@ export class CronParser {
     }
   }
 
+  private isWildcard(values: number[], min: number, max: number): boolean {
+    return values.length === max - min + 1;
+  }
+
   matches(expression: string, date: Date): boolean {
     const parsed = this.parse(expression);
     
@@ -188,10 +205,21 @@ export class CronParser {
     const month = date.getMonth() + 1;
     const dayOfWeek = date.getDay();
 
+    const domWildcard = this.isWildcard(parsed.dayOfMonth, 1, 31);
+    const dowWildcard = this.isWildcard(parsed.dayOfWeek, 0, 6);
+
+    const dayMatch = domWildcard && dowWildcard
+      ? true
+      : domWildcard
+        ? parsed.dayOfWeek.includes(dayOfWeek)
+        : dowWildcard
+          ? parsed.dayOfMonth.includes(dayOfMonth)
+          : parsed.dayOfMonth.includes(dayOfMonth) || parsed.dayOfWeek.includes(dayOfWeek);
+
     return parsed.minute.includes(minute) &&
            parsed.hour.includes(hour) &&
            parsed.month.includes(month) &&
-           (parsed.dayOfMonth.includes(dayOfMonth) || parsed.dayOfWeek.includes(dayOfWeek));
+           dayMatch;
   }
 
   getDescription(expression: string): string {

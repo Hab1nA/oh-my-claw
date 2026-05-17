@@ -482,8 +482,7 @@ export class TelegramAdapter extends BaseChannelAdapter {
   protected extractMetadata(payload: unknown): MessageMetadata {
     const msg = payload as TelegramMessage;
     const metadata: MessageMetadata = {
-      isEdited: msg.edit_date !== undefined,
-      rawPayload: payload
+      isEdited: msg.edit_date !== undefined
     };
 
     if (msg.reply_to_message) {

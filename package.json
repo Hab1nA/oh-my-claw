@@ -12,7 +12,7 @@
     "dev:gateway": "ts-node src/gateway/index.ts",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "jest",
+    "test": "jest --forceExit",
     "clean": "rm -rf dist"
   },
   "keywords": [

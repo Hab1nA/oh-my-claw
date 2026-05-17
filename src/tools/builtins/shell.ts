@@ -60,22 +60,33 @@ export const shellTool: ToolDefinition = {
 
 export function isDangerousCommand(command: string, blockedCommandsText = ''): boolean {
   const normalized = command.trim().toLowerCase();
+
+  const noSpace = normalized.replace(/\s+/g, ' ');
+
   const configured = blockedCommandsText
     .split(';')
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean);
 
+  if (configured.some((item) => noSpace.includes(item))) {
+    return true;
+  }
+
   const dangerousPatterns = [
-    /^rm\s+-rf\s+\//,
-    /\bdd\b/,
+    /\brm\s+(-[a-qs-z]*r[a-qs-z]*f|-.*r.*f)\s+\//,
+    /\bdd\s+/,
     /\bmkfs\b/,
     /\bformat\b/,
     /\bshutdown\b/,
-    /curl\s+.*\|\s*(sh|bash|powershell|pwsh)/,
-    /wget\s+.*\|\s*(sh|bash|powershell|pwsh)/,
+    /\breboot\b/,
+    /(\bcurl\b|\bwget\b).*\|\s*(sh|bash|powershell|pwsh)/,
     />\s*\/dev\/sd[a-z]/,
-    /\bdel\s+\/f\s+\/s\s+\/q\s+[a-z]:\\/i
+    /\bdel\s+\/f\s+\/s\s+\/q\s+[a-z]:\\/i,
+    /\$\(/,
+    /`/,
+    /\bbase64\b.*\|\s*(sh|bash)/,
+    /\bxargs\s+(sh|bash|rm)\b/,
   ];
 
-  return configured.some((item) => normalized.includes(item)) || dangerousPatterns.some((pattern) => pattern.test(normalized));
+  return dangerousPatterns.some((pattern) => pattern.test(normalized));
 }

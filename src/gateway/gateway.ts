@@ -64,6 +64,8 @@ export class Gateway {
         user: !!configs.user
       });
 
+      this.runtime.setEngineConfig(configs.soul, configs.identity, configs.user);
+
       await this.skillsLoader.loadAll();
       logger.info('Skills loaded', { count: this.skillsLoader.getSkillCount() });
 

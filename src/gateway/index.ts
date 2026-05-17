@@ -38,25 +38,29 @@ async function main() {
 
     let gatewayRef: Gateway | undefined;
 
-    const channelRouter = new ChannelRouterImpl({
-      async onMessage(message: NormalizedMessage) {
-        if (gatewayRef) {
-          await gatewayRef.handleIncomingMessage(message);
-        } else {
-          logger.warn('Message received before Gateway is ready', {
-            channel: message.channel,
-            sender: message.sender.id
-          });
+    const sessionManager = new SessionManager(config.memory);
+
+    const channelRouter = new ChannelRouterImpl(
+      {
+        async onMessage(message: NormalizedMessage) {
+          if (gatewayRef) {
+            await gatewayRef.handleIncomingMessage(message);
+          } else {
+            logger.warn('Message received before Gateway is ready', {
+              channel: message.channel,
+              sender: message.sender.id
+            });
+          }
+        },
+        onError(error: Error) {
+          logger.error('Channel error', { error: error.message });
         }
       },
-      onError(error: Error) {
-        logger.error('Channel error', { error: error.message });
-      }
-    });
+      sessionManager
+    );
 
     const heartbeatScheduler = new HeartbeatScheduler(toolRegistry, channelRouter);
 
-    const sessionManager = new SessionManager(config.memory);
     const modelCaller = new OpenAICompatibleModelCaller(config.agent);
     const agentRuntime = new AgentRuntimeImpl({
       sessionManager,
