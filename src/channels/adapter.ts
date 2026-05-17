@@ -1,7 +1,6 @@
 import { EventEmitter } from 'events';
-import { v4 as uuidv4 } from 'uuid';
 import type { ChannelConfig, ContentType, NormalizedMessage, OutboundMessage, MessageSender, MessageRecipient, MessageContent, Attachment, MessageMetadata } from '../types/index.js';
-import { logger, ChannelError } from '../utils/index.js';
+import { logger, ChannelError, randomId } from '../utils/index.js';
 
 export abstract class BaseChannelAdapter extends EventEmitter {
   protected config: ChannelConfig;
@@ -46,7 +45,7 @@ export abstract class BaseChannelAdapter extends EventEmitter {
   protected abstract extractMetadata(payload: unknown): MessageMetadata;
 
   protected generateMessageId(): string {
-    return uuidv4();
+    return randomId();
   }
 
   protected normalizeIncoming(payload: unknown): NormalizedMessage {
@@ -95,11 +94,16 @@ export abstract class BaseChannelAdapter extends EventEmitter {
     }
   }
 
+  private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+
   protected async scheduleReconnect(): Promise<void> {
+    if (this.reconnectTimer) return; // already waiting for a reconnect
+
     const delay = this.config.reconnectDelay ?? 5000;
     logger.info(`Scheduling reconnect in ${delay}ms`, { channel: this.channelName });
-    
-    setTimeout(async () => {
+
+    this.reconnectTimer = setTimeout(async () => {
+      this.reconnectTimer = undefined;
       try {
         await this.init();
         await this.startListening();

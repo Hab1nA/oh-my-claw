@@ -76,6 +76,7 @@ const reminderSkill: SkillModule = {
           await notifyUser(context.sessionId, `⏰ Reminder: ${message}`);
           reminders.delete(reminderId);
         }, delay);
+        timer.unref(); // Don't block process exit
 
         const reminder: Reminder = {
           id: reminderId,

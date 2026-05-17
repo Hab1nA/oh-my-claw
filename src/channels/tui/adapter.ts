@@ -283,7 +283,7 @@ export class TuiAdapter extends BaseChannelAdapter {
     return this.colorEnabled ? `${ansi}${text}${RESET}` : text;
   }
 
-  private print(text: string, _color?: string): void {
-    console.log(text);
+  private print(text: string, color?: string): void {
+    console.log(color ? `${color}${text}${RESET}` : text);
   }
 }

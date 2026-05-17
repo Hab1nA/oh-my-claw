@@ -4,6 +4,7 @@ import type { MemoryConfig } from '../../types/config.js';
 import { SessionNotFoundError } from '../../utils/errors.js';
 import type { Message, SessionState } from '../../types/index.js';
 import { randomId } from '../../utils/id.js';
+import { logger } from '../../utils/logger.js';
 import type { Session } from './types.js';
 
 export class SessionManager {
@@ -136,7 +137,11 @@ export class SessionManager {
       const raw = await readFile(filePath, 'utf-8');
       const parsed = JSON.parse(raw) as Session;
       return reviveSession(parsed);
-    } catch {
+    } catch (error) {
+      logger.warn('Failed to load session file, treating as non-existent', {
+        sessionId,
+        error: (error as Error).message
+      });
       return undefined;
     }
   }

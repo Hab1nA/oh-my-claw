@@ -1,7 +1,6 @@
 import type { GatewayConfig, IdentityConfig, SoulConfig, UserPreferences } from '../types/config.js';
 import { logger } from '../utils/logger.js';
 import type { AgentResponse, Message, SessionState } from '../types/index.js';
-import { randomId } from '../utils/id.js';
 import type { ModelCaller } from './model/interface.js';
 import { ReactEngine, type ReactEngineConfig } from './react/engine.js';
 import { ReactState, type ReactContext } from './react/types.js';
@@ -56,18 +55,15 @@ export class AgentRuntimeImpl implements AgentRuntime {
       };
 
       const response = await this.engine.run(context);
-      const assistantMessage: Message = {
-        id: randomId(),
-        role: 'assistant',
-        content: response.message,
-        timestamp: new Date(),
-        metadata: response.metadata
-      };
 
-      await this.options.sessionManager.replaceMessages(sessionId, [
-        ...context.messages,
-        assistantMessage
-      ]);
+      // Merge engine-level metadata (state, iterations) into the last assistant
+      // message that think() already pushed — avoids duplicating the response.
+      const lastMsg = context.messages[context.messages.length - 1];
+      if (lastMsg && lastMsg.role === 'assistant') {
+        lastMsg.metadata = { ...lastMsg.metadata, ...response.metadata };
+      }
+
+      await this.options.sessionManager.replaceMessages(sessionId, context.messages);
       await this.options.sessionManager.setStatus(sessionId, 'idle');
       return response;
     } catch (error) {

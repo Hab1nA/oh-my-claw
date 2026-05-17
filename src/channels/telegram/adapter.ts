@@ -495,18 +495,29 @@ export class TelegramAdapter extends BaseChannelAdapter {
   async send(destination: string, message: OutboundMessage): Promise<void> {
     try {
       const params: Record<string, unknown> = {
-        chat_id: destination,
-        parse_mode: 'MarkdownV2'
+        chat_id: destination
       };
 
       if (message.content.type === 'text') {
         params['text'] = this.escapeMarkdownV2(message.content.text ?? '');
+        params['parse_mode'] = 'MarkdownV2';
         
         if (message.replyMarkup) {
           params['reply_markup'] = this.formatReplyMarkup(message.replyMarkup);
         }
 
-        await this.apiCall('sendMessage', params);
+        try {
+          await this.apiCall('sendMessage', params);
+        } catch (sendError) {
+          // If MarkdownV2 parsing fails, retry as plain text
+          logger.warn('MarkdownV2 send failed, retrying as plain text', {
+            channel: this.channelName,
+            error: (sendError as Error).message
+          });
+          delete params['parse_mode'];
+          params['text'] = message.content.text ?? '';
+          await this.apiCall('sendMessage', params);
+        }
       } else if (message.content.type === 'image') {
         params['photo'] = message.content.url;
         if (message.content.text) {

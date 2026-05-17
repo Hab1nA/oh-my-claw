@@ -38,6 +38,11 @@ const webSearchSkill: SkillModule = {
         const { query, num_results = 5 } = params as { query: string; num_results?: number };
 
         try {
+          const headers: Record<string, string> = {};
+          if (SEARCH_API_KEY) {
+            headers['Authorization'] = `Bearer ${SEARCH_API_KEY}`;
+          }
+
           const response = await axios.get(SEARCH_API_URL, {
             params: {
               q: query,
@@ -45,6 +50,7 @@ const webSearchSkill: SkillModule = {
               no_html: 1,
               skip_disambig: 1
             },
+            headers,
             timeout: 15000
           });
 

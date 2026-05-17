@@ -1,9 +1,8 @@
-import { v4 as uuidv4 } from 'uuid';
 import type { NormalizedMessage } from '../types/index.js';
 import type { BaseChannelAdapter } from './adapter.js';
 import type { MessageHandler, ChannelRouter } from './types.js';
 import type { SessionManager } from '../agent/session/manager.js';
-import { logger } from '../utils/index.js';
+import { logger, randomId } from '../utils/index.js';
 
 export class ChannelRouterImpl implements ChannelRouter {
   private adapters: Map<string, BaseChannelAdapter> = new Map();
@@ -113,7 +112,7 @@ export class ChannelRouterImpl implements ChannelRouter {
       return existingSessionId;
     }
 
-    const sessionId = uuidv4();
+    const sessionId = randomId();
     this.sessionIndex.set(indexKey, sessionId);
 
     if (this.sessionManager) {

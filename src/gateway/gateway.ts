@@ -186,6 +186,11 @@ export class Gateway {
       }
 
       if (req.method === 'POST' && url.pathname === '/v1/messages') {
+        const contentType = req.headers['content-type'] ?? '';
+        if (contentType && !contentType.includes('application/json')) {
+          this.sendJson(res, 415, { error: 'Content-Type must be application/json' });
+          return;
+        }
         const body = await readJsonBody(req);
         const sessionId = String(body.sessionId ?? 'default');
         const content = String(body.message ?? body.content ?? '');

@@ -136,24 +136,24 @@ export class CronParser {
   getNextRun(expression: string, timezone?: string): Date {
     const parsed = this.parse(expression);
     const now = new Date();
-    
-    const tzOffset = timezone ? this.getTimezoneOffset(timezone) : 0;
-    const adjustedNow = new Date(now.getTime() + tzOffset);
+
+    // Get current date/time components in the target timezone (or UTC)
+    const parts = this.getDateTimeParts(now, timezone);
 
     const domWildcard = this.isWildcard(parsed.dayOfMonth, 1, 31);
     const dowWildcard = this.isWildcard(parsed.dayOfWeek, 0, 6);
 
-    for (let year = adjustedNow.getFullYear(); year < adjustedNow.getFullYear() + 5; year++) {
+    for (let year = parts.year; year < parts.year + 5; year++) {
       for (const month of parsed.month) {
-        const daysInMonth = new Date(year, month, 0).getDate();
+        const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
 
         const daysToCheck = domWildcard
           ? Array.from({ length: daysInMonth }, (_, i) => i + 1)
           : parsed.dayOfMonth.filter(d => d <= daysInMonth);
 
         for (const day of daysToCheck) {
-          const date = new Date(year, month - 1, day);
-          const dow = date.getDay();
+          // Compute day-of-week in the target timezone
+          const dow = this.getDayOfWeek(year, month - 1, day, timezone);
 
           const dayMatch = domWildcard && dowWildcard
             ? true
@@ -167,10 +167,10 @@ export class CronParser {
 
           for (const hour of parsed.hour) {
             for (const minute of parsed.minute) {
-              const candidate = new Date(year, month - 1, day, hour, minute, 0, 0);
-              
-              if (candidate.getTime() > adjustedNow.getTime()) {
-                return new Date(candidate.getTime() - tzOffset);
+              const candidateUtc = this.toUtcTimestamp(year, month - 1, day, hour, minute, timezone);
+
+              if (candidateUtc > now.getTime()) {
+                return new Date(candidateUtc);
               }
             }
           }
@@ -181,15 +181,50 @@ export class CronParser {
     throw new Error('Could not find next run time within 5 years');
   }
 
-  private getTimezoneOffset(timezone: string): number {
-    try {
-      const now = new Date();
-      const utcDate = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
-      const tzDate = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
-      return tzDate.getTime() - utcDate.getTime();
-    } catch {
-      return 0;
+  /** Extract year/month/day/hour/minute from a Date in the given timezone. */
+  private getDateTimeParts(date: Date, timezone?: string): { year: number; month: number; day: number; hour: number; minute: number } {
+    const parts: Record<string, string> = {};
+    const fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone ?? 'UTC',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false
+    });
+    for (const { type, value } of fmt.formatToParts(date)) {
+      parts[type] = value;
     }
+    return {
+      year: Number(parts.year),
+      month: Number(parts.month),
+      day: Number(parts.day),
+      hour: Number(parts.hour),
+      minute: Number(parts.minute)
+    };
+  }
+
+  /** Compute day-of-week (0=Sun) for a given calendar date in the target timezone. */
+  private getDayOfWeek(year: number, month: number, day: number, timezone?: string): number {
+    // Create a UTC noon timestamp (avoids DST edge cases), then format in target tz
+    const utcNoon = Date.UTC(year, month, day, 12, 0, 0);
+    const fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone ?? 'UTC',
+      weekday: 'short'
+    });
+    const weekdayStr = fmt.format(new Date(utcNoon));
+    const map: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    return map[weekdayStr] ?? 0;
+  }
+
+  /** Convert a local-time calendar date in the target timezone to a UTC timestamp (ms). */
+  private toUtcTimestamp(year: number, month: number, day: number, hour: number, minute: number, timezone?: string): number {
+    if (!timezone) {
+      return Date.UTC(year, month, day, hour, minute, 0, 0);
+    }
+    // Strategy: create a UTC guess, measure the offset, then adjust.
+    const guessUtc = Date.UTC(year, month, day, hour, minute, 0, 0);
+    const parts = this.getDateTimeParts(new Date(guessUtc), timezone);
+    const actualUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, 0, 0);
+    const offset = actualUtc - guessUtc; // positive if tz is ahead of UTC
+    return guessUtc - offset;
   }
 
   private isWildcard(values: number[], min: number, max: number): boolean {
