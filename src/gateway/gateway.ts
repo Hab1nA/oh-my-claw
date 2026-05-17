@@ -1,37 +1,53 @@
-import { logger } from '../utils/index';
-import type { NormalizedMessage, OutboundMessage } from '../types/index';
-import type { AgentRuntime, SessionManager } from './runtime.interface';
-import type { ChannelRouter, ChannelRouterImpl } from '../channels/index';
-import type { ToolRegistryImpl } from '../tools/index';
-import type { SkillsLoader } from '../tools/skills-loader';
-import type { ConfigParser } from '../config/parser';
-import type { HeartbeatScheduler } from '../heartbeat/scheduler';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { URL } from 'node:url';
+import { WebSocketServer, type WebSocket } from 'ws';
+import { AgentRuntimeImpl } from '../agent/runtime.js';
+import { SessionManager } from '../agent/session/manager.js';
+import type { ToolRegistryContract } from '../tools/registry.js';
+import type { Message, NormalizedMessage, OutboundMessage } from '../types/index.js';
+import { randomId } from '../utils/id.js';
+import type { GatewayConfig } from '../types/config.js';
+import { logger } from '../utils/logger.js';
+import type { ChannelRouter } from '../channels/types.js';
+import type { SkillsLoader } from '../tools/skills-loader.js';
+import type { ConfigParser } from '../config/parser.js';
+import type { HeartbeatScheduler } from '../heartbeat/scheduler.js';
 
-/**
- * Gateway主类 - 集成任务流甲和任务流乙
- */
+export interface GatewayDeps {
+  config: GatewayConfig;
+  toolRegistry: ToolRegistryContract;
+  sessionManager: SessionManager;
+  agentRuntime: AgentRuntimeImpl;
+  channelRouter: ChannelRouter;
+  skillsLoader: SkillsLoader;
+  configParser: ConfigParser;
+  heartbeatScheduler: HeartbeatScheduler;
+}
+
 export class Gateway {
-  private isRunning: boolean = false;
+  private readonly server: Server;
+  private readonly wss: WebSocketServer;
+  private readonly runtime: AgentRuntimeImpl;
+  private readonly sessionManager: SessionManager;
+  private readonly skillsLoader: SkillsLoader;
+  private readonly configParser: ConfigParser;
+  private readonly heartbeatScheduler: HeartbeatScheduler;
+  private readonly channelRouter: ChannelRouter;
+  private isRunning = false;
 
-  constructor(
-    private config: {
-      configPath: string;
-      skillsPath: string;
-      port: number;
-      host: string;
-    },
-    private channelRouter: ChannelRouter,
-    private toolRegistry: ToolRegistryImpl,
-    private skillsLoader: SkillsLoader,
-    private configParser: ConfigParser,
-    private heartbeatScheduler: HeartbeatScheduler,
-    private agentRuntime?: AgentRuntime,
-    private sessionManager?: SessionManager
-  ) {}
+  constructor(private readonly deps: GatewayDeps) {
+    this.runtime = deps.agentRuntime;
+    this.sessionManager = deps.sessionManager;
+    this.skillsLoader = deps.skillsLoader;
+    this.configParser = deps.configParser;
+    this.heartbeatScheduler = deps.heartbeatScheduler;
+    this.channelRouter = deps.channelRouter;
 
-  /**
-   * 启动Gateway
-   */
+    this.server = createServer((req, res) => void this.handleHttp(req, res));
+    this.wss = new WebSocketServer({ server: this.server });
+    this.wss.on('connection', (ws) => this.handleWebSocketConnection(ws));
+  }
+
   async start(): Promise<void> {
     if (this.isRunning) {
       logger.warn('Gateway is already running');
@@ -41,7 +57,6 @@ export class Gateway {
     logger.info('Starting OpenClaw Gateway...');
 
     try {
-      // 1. 加载配置
       const configs = await this.configParser.parseAll();
       logger.info('Configuration loaded', {
         soul: !!configs.soul,
@@ -49,48 +64,50 @@ export class Gateway {
         user: !!configs.user
       });
 
-      // 2. 加载技能
       await this.skillsLoader.loadAll();
       logger.info('Skills loaded', { count: this.skillsLoader.getSkillCount() });
 
-      // 3. 加载Heartbeat任务
-      await this.heartbeatScheduler.loadTasks(this.config.configPath);
+      await this.heartbeatScheduler.loadTasks(this.configParser.getConfigPath());
       logger.info('Heartbeat tasks loaded', { count: this.heartbeatScheduler.listTasks().length });
 
-      // 4. 启动渠道适配器
       await this.channelRouter.startAll();
       logger.info('Channel adapters started');
 
-      // 5. 启动Heartbeat调度器
       this.heartbeatScheduler.start();
       logger.info('Heartbeat scheduler started');
 
+      await new Promise<void>((resolve, reject) => {
+        this.server.once('error', reject);
+        this.server.listen(this.deps.config.port, this.deps.config.host, () => {
+          this.server.off('error', reject);
+          resolve();
+        });
+      });
+      logger.info(`HTTP/WS server listening on ${this.deps.config.host}:${this.deps.config.port}`);
+
       this.isRunning = true;
       logger.info('OpenClaw Gateway started successfully');
-
-      // 注册消息处理器
-      this.setupMessageHandler();
-
     } catch (error) {
       logger.error('Failed to start Gateway', { error: (error as Error).message });
       throw error;
     }
   }
 
-  /**
-   * 停止Gateway
-   */
   async stop(): Promise<void> {
-    if (!this.isRunning) {
-      return;
-    }
+    if (!this.isRunning) return;
 
     logger.info('Stopping OpenClaw Gateway...');
 
     try {
-      // 按相反顺序停止
       this.heartbeatScheduler.stop();
       await this.channelRouter.stopAll();
+      this.wss.close();
+      await new Promise<void>((resolve, reject) => {
+        this.server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
 
       this.isRunning = false;
       logger.info('OpenClaw Gateway stopped');
@@ -100,17 +117,6 @@ export class Gateway {
     }
   }
 
-  /**
-   * 设置消息处理器
-   */
-  private setupMessageHandler(): void {
-    // 在实际实现中，这里会设置 ChannelRouter 的消息处理器
-    // 来调用 AgentRuntime.processMessage
-  }
-
-  /**
-   * 处理传入消息的示例方法
-   */
   async handleIncomingMessage(message: NormalizedMessage): Promise<void> {
     logger.debug('Handling incoming message', {
       channel: message.channel,
@@ -118,57 +124,27 @@ export class Gateway {
       text: message.content.text?.substring(0, 100)
     });
 
-    // 如果有Agent Runtime，则委托给它处理
-    if (this.agentRuntime) {
-      // 1. 转换NormalizedMessage为Agent Runtime可用的Message格式
-      const agentMessage = this.convertToAgentMessage(message);
-
-      // 2. 确保会话存在
-      const sessionId = message.sessionId || await this.ensureSession(message);
-
-      // 3. 调用Agent Runtime处理
-      const response = await this.agentRuntime.processMessage(sessionId, agentMessage);
-
-      // 4. 发送响应回用户
-      await this.sendResponse(message, response);
-
-    } else {
-      // 简单的回显响应，用于演示
-      await this.handleSimpleEcho(message);
-    }
-  }
-
-  /**
-   * 确保会话存在
-   */
-  private async ensureSession(message: NormalizedMessage): Promise<string> {
-    if (this.sessionManager) {
-      const session = await this.sessionManager.createSession(
-        message.sender.id,
-        message.channel
-      );
-      return session.id;
-    }
-    // 回退到Channel Router的会话管理
-    return message.id;
-  }
-
-  /**
-   * 转换消息格式
-   */
-  private convertToAgentMessage(message: NormalizedMessage): any {
-    return {
+    const agentMessage: Message = {
       id: message.id,
       role: 'user',
       content: message.content.text || '',
       timestamp: message.timestamp,
-      metadata: message.metadata
+      metadata: { ...message.metadata }
     };
+
+    const sessionId = message.sessionId || await this.ensureSession(message);
+    const response = await this.runtime.processMessage(sessionId, agentMessage);
+    await this.sendResponse(message, response);
   }
 
-  /**
-   * 发送响应回用户
-   */
+  private async ensureSession(message: NormalizedMessage): Promise<string> {
+    const session = await this.sessionManager.createSession(
+      message.sender.id,
+      message.channel
+    );
+    return session.id;
+  }
+
   private async sendResponse(
     message: NormalizedMessage,
     response: { message: string; type: string }
@@ -183,41 +159,89 @@ export class Gateway {
 
     const adapter = this.channelRouter.getAdapter(message.channel);
     if (adapter) {
-      await adapter.send(message.recipient.id, outbound);
+      await adapter.send(message.sender.id, outbound);
     }
   }
 
-  /**
-   * 简单的回显响应（演示用）
-   */
-  private async handleSimpleEcho(message: NormalizedMessage): Promise<void> {
-    const text = message.content.text;
-    if (!text) return;
-
-    let response: string;
-
-    // 检查是否有技能匹配
-    const matchedSkills = this.skillsLoader.findMatchingSkills(text);
-    if (matchedSkills.length > 0) {
-      response = `我识别到你可能需要使用以下技能: ${matchedSkills.map(s => s.name).join(', ')}`;
-    } else if (text.toLowerCase().includes('天气')) {
-      response = '我可以帮你查询天气，但需要你配置天气API密钥';
-    } else if (text.toLowerCase().includes('提醒')) {
-      response = '我可以帮你设置提醒，告诉我你想在什么时候提醒你什么';
-    } else {
-      response = `收到你的消息: ${text.substring(0, 100)}${text.length > 100 ? '...' : ''}`;
-    }
-
-    const outbound: OutboundMessage = {
-      content: {
-        type: 'text',
-        text: response
+  private async handleHttp(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
+    try {
+      if (req.method === 'GET' && url.pathname === '/health') {
+        this.sendJson(res, 200, { status: 'ok', service: 'openclaw-minimal-gateway' });
+        return;
       }
-    };
 
-    const adapter = this.channelRouter.getAdapter(message.channel);
-    if (adapter) {
-      await adapter.send(message.recipient.id, outbound);
+      if (req.method === 'GET' && url.pathname.startsWith('/sessions/')) {
+        const sessionId = url.pathname.split('/')[2] ?? 'default';
+        this.sendJson(res, 200, await this.runtime.getSessionState(sessionId));
+        return;
+      }
+
+      if (req.method === 'POST' && url.pathname === '/v1/messages') {
+        const body = await readJsonBody(req);
+        const sessionId = String(body.sessionId ?? 'default');
+        const content = String(body.message ?? body.content ?? '');
+        const msg: Message = {
+          id: String(body.messageId ?? randomId()),
+          role: 'user',
+          content,
+          timestamp: new Date(),
+          metadata: asRecord(body.metadata)
+        };
+        const response = await this.runtime.processMessage(sessionId, msg);
+        this.sendJson(res, 200, response);
+        return;
+      }
+
+      this.sendJson(res, 404, { error: 'Not Found' });
+    } catch (error) {
+      logger.error('HTTP request failed', { error: String(error) });
+      this.sendJson(res, 500, { error: String(error) });
     }
   }
+
+  private handleWebSocketConnection(ws: WebSocket): void {
+    ws.on('message', (raw) => {
+      void this.handleWebSocketMessage(ws, raw);
+    });
+  }
+
+  private async handleWebSocketMessage(ws: WebSocket, raw: unknown): Promise<void> {
+    try {
+      const text = typeof raw === 'string' ? raw : String(raw);
+      const body = JSON.parse(text) as Record<string, unknown>;
+      const sessionId = String(body.sessionId ?? 'default');
+      const msg: Message = {
+        id: String(body.messageId ?? randomId()),
+        role: 'user',
+        content: String(body.message ?? body.content ?? ''),
+        timestamp: new Date(),
+        metadata: asRecord(body.metadata)
+      };
+      const response = await this.runtime.processMessage(sessionId, msg);
+      ws.send(JSON.stringify(response));
+    } catch (error) {
+      ws.send(JSON.stringify({ error: String(error) }));
+    }
+  }
+
+  private sendJson(res: ServerResponse, statusCode: number, data: unknown): void {
+    res.writeHead(statusCode, { 'content-type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify(data));
+  }
+}
+
+async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  if (chunks.length === 0) return {};
+  return JSON.parse(Buffer.concat(chunks).toString('utf-8')) as Record<string, unknown>;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }

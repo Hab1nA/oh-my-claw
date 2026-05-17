@@ -41,6 +41,7 @@ export interface AgentConfig {
   baseUrl?: string;
   maxTokens: number;
   temperature: number;
+  maxIterations: number;
 }
 
 export interface ToolsConfig {

@@ -11,6 +11,10 @@ export class ConfigParser {
     this.configPath = configPath;
   }
 
+  getConfigPath(): string {
+    return this.configPath;
+  }
+
   async parseSoul(): Promise<SoulConfig> {
     const soulPath = join(this.configPath, 'SOUL.md');
     

@@ -70,3 +70,10 @@ export class HeartbeatError extends OpenClawError {
     this.name = 'HeartbeatError';
   }
 }
+
+export class SessionNotFoundError extends OpenClawError {
+  constructor(sessionId: string) {
+    super(`Session not found: ${sessionId}`, 'SESSION_NOT_FOUND', { sessionId });
+    this.name = 'SessionNotFoundError';
+  }
+}

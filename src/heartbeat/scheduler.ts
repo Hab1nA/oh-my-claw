@@ -3,20 +3,20 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import { CronParser } from './cron.js';
 import type { HeartbeatTask, HeartbeatAction, ScheduledTask } from '../types/index.js';
-import type { ToolRegistry } from '../tools/registry.js';
+import type { ToolRegistryContract } from '../tools/registry.js';
 import type { ChannelRouter } from '../channels/types.js';
-import { logger } from '../utils/index.js';
+import { logger, filterEnvVars } from '../utils/index.js';
 
 export class HeartbeatScheduler {
   private tasks: Map<string, ScheduledTask> = new Map();
   private cronParser: CronParser;
-  private toolRegistry: ToolRegistry;
+  private toolRegistry: ToolRegistryContract;
   private channelRouter: ChannelRouter;
   private checkInterval: ReturnType<typeof setInterval> | undefined;
   private isRunning: boolean = false;
 
   constructor(
-    toolRegistry: ToolRegistry,
+    toolRegistry: ToolRegistryContract,
     channelRouter: ChannelRouter
   ) {
     this.cronParser = new CronParser();
@@ -176,7 +176,7 @@ export class HeartbeatScheduler {
               sessionId: task.id,
               userId: 'heartbeat',
               workingDirectory: process.cwd(),
-              environment: process.env as Record<string, string>
+              environment: filterEnvVars(process.env)
             }
           );
         } else {
@@ -209,7 +209,7 @@ export class HeartbeatScheduler {
               sessionId: task.id,
               userId: 'heartbeat',
               workingDirectory: process.cwd(),
-              environment: process.env as Record<string, string>
+              environment: filterEnvVars(process.env)
             }
           );
         } else {

@@ -4,3 +4,4 @@ export * from './channels/index.js';
 export * from './tools/index.js';
 export * from './config/index.js';
 export * from './heartbeat/index.js';
+export * from './agent/runtime.interface.js';
