@@ -1,6 +1,7 @@
 import { promises as fs } from 'fs';
 import { existsSync } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
+import { pathToFileURL } from 'url';
 import yaml from 'yaml';
 import type { ToolDefinition, SkillDefinition, SkillTrigger, LoadedSkill, SkillModule } from '../types/index.js';
 import type { ToolRegistryContract } from './registry.js';
@@ -102,10 +103,12 @@ export class SkillsLoader {
       let skillModule: SkillModule;
 
       if (existsSync(indexJsPath)) {
-        const module = await import(indexJsPath);
+        const fileUrl = pathToFileURL(resolve(indexJsPath)).href;
+        const module = await import(fileUrl);
         skillModule = module.default ?? module;
       } else if (existsSync(indexPath)) {
-        const module = await import(indexPath);
+        const fileUrl = pathToFileURL(resolve(indexPath)).href;
+        const module = await import(fileUrl);
         skillModule = module.default ?? module;
       } else {
         logger.warn(`Skill ${skillName}: No index.js/ts found, skipping`);
